@@ -205,6 +205,7 @@ const src = [
   extract('findNavOnOrBefore'),
   extract('latestPoint'),
   extract('dateStrToTs'),
+  extract('adjReturnPct'),
   extract('enrichRecords'),
   extract('summarize'),
   extract('computeDrawdownMap'),
@@ -214,7 +215,7 @@ const src = [
 const sandbox = {};
 try {
   const fn = new Function(src + `
-    return { toDateStr, findNavOnOrBefore, latestPoint, dateStrToTs, enrichRecords, summarize, computeDrawdownMap, computeMA };
+    return { toDateStr, findNavOnOrBefore, latestPoint, dateStrToTs, adjReturnPct, enrichRecords, summarize, computeDrawdownMap, computeMA };
   `);
   Object.assign(sandbox, fn());
   ok('核心计算函数可独立执行', true);
@@ -458,6 +459,94 @@ ok('存在 MA 计算函数（15/60 日）', /function computeMA\(points, n\)/.te
 ok('均线为虚线且配色区分', /stroke="#ffb020"[^>]*stroke-dasharray/.test(html) && /stroke="#b57bff"[^>]*stroke-dasharray/.test(html));
 ok('图例含均线与卖出点', /15日均线/.test(html) && /60日均线/.test(html) && /卖出点（较上次买入）/.test(html));
 ok('悬停浮层显示均线值', /ma15: ma15Map/.test(html) && /15日均线/.test(html));
+
+/* ============================================================
+   15. 迭代 v1.4：数据安全 / 分红口径 / 并发
+   ============================================================ */
+console.log('\n【迭代 v1.4】数据安全 / 分红口径 / 并发');
+
+const serverSrc = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+
+ok('记录与净值缓存分离持久化（records.json）', /records\.json/.test(serverSrc));
+ok('净值缓存独立文件（navCache.json）', /navCache\.json/.test(serverSrc));
+ok('写入前生成快照', /function snapshot\s*\(/.test(serverSrc) && /snapshot\(RECORDS_FILE/.test(serverSrc));
+ok('损坏文件隔离保留（不删除、不覆盖）',
+   /function quarantine\s*\(/.test(serverSrc) && /renameSync\(file, target\)/.test(serverSrc));
+ok('损坏时返回 corrupt 标记（前端据此不预置示例数据）',
+   /corrupt: true/.test(serverSrc) && /state\.dataCorrupt/.test(html));
+ok('rev 并发校验 + 409 冲突', /conflict: true/.test(serverSrc) && /status === 409|sendJson\(res, 409/.test(serverSrc));
+ok('前端冲突交由用户决策（不静默覆盖）',
+   /function resolveConflict\s*\(/.test(html) && /数据冲突/.test(html));
+ok('跨标签页 storage 事件同步', /addEventListener\('storage'/.test(html));
+ok('无通配 CORS 头', !/Access-Control-Allow-Origin/.test(serverSrc));
+ok('Host / Origin 访问校验', /function checkAccess\s*\(/.test(serverSrc) && /ALLOWED_HOSTS/.test(serverSrc));
+ok('累计净值按时间戳对齐（非位置切片）',
+   /Data_ACWorthTrend/.test(serverSrc) && /acMap\.has\(trend\[i\]\.ts\)/.test(serverSrc));
+ok('前端不再把净值缓存写入 localStorage',
+   extract('serialize').indexOf('funds') === -1, 'serialize 仍包含 funds');
+ok('escapeHtml 转义 & < > " \'',
+   /replace\(\/&\/g, '&amp;'\)\.replace\(\/<\/g, '&lt;'\)\.replace\(\/>\/g, '&gt;'\)/.test(html));
+
+if (sandbox.adjReturnPct) {
+  // 纯单位净值口径（无 ac）→ 与修正前行为一致
+  ok('无累计净值数据时退化为单位净值口径',
+     Math.abs(sandbox.adjReturnPct({ nav: 1.0 }, { nav: 0.8 }) - (-20)) < 1e-9,
+     'got ' + sandbox.adjReturnPct({ nav: 1.0 }, { nav: 0.8 }));
+  // 含分红：1.0 买入（累计 1.5），分红后单位净值 0.8（累计 1.6）→ 实际 +10%，不是 -20%
+  ok('分红修正：单位净值 -20% 修正为实际 +10%',
+     Math.abs(sandbox.adjReturnPct({ nav: 1.0, ac: 1.5 }, { nav: 0.8, ac: 1.6 }) - 10) < 1e-9,
+     'got ' + sandbox.adjReturnPct({ nav: 1.0, ac: 1.5 }, { nav: 0.8, ac: 1.6 }));
+  // 仅一端有 ac → 不做修正，避免半口径失真
+  ok('仅一端有累计净值时不修正',
+     Math.abs(sandbox.adjReturnPct({ nav: 1.0 }, { nav: 0.8, ac: 1.6 }) - (-20)) < 1e-9);
+}
+
+if (sandbox.enrichRecords && sandbox.summarize) {
+  const dd4 = (s) => new Date(s + 'T00:00:00').getTime();
+  const dPts = [
+    { ts: dd4('2026-01-01'), nav: 1.0, ac: 1.5 },
+    { ts: dd4('2026-01-05'), nav: 0.8, ac: 1.6 }
+  ];
+  const dRecs = [{ id: 'd1', code: 'X', type: 'buy', date: '2026-01-01', amount: 1000, createdAt: 1 }];
+  const dEn = sandbox.enrichRecords(dRecs, { points: dPts });
+  ok('持有至最新按累计净值口径（分红后仍为 +10%）',
+     Math.abs(dEn[0].vsLatest - 10) < 1e-9, 'got ' + dEn[0].vsLatest);
+  const dS = sandbox.summarize(dEn);
+  // 1000 份 @1.0；持有期内每份分红 0.3（1.6-1.5 的差） → 现金 300 + 市值 800 = 1100 → 盈亏 +100
+  // 若按旧的纯单位净值口径会算成 800 - 1000 = -200（把分红当成亏损）
+  ok('分红修正后盈亏 = 800 + 300 − 1000 = +100',
+     Math.abs(dS.profit - 100) < 1e-6, 'got ' + dS.profit);
+  ok('标记已做分红修正', dS.dividendAdjusted === true);
+
+  const nPts = [
+    { ts: dd4('2026-01-01'), nav: 1.0 },
+    { ts: dd4('2026-01-05'), nav: 0.8 }
+  ];
+  const nS = sandbox.summarize(sandbox.enrichRecords(dRecs, { points: nPts }));
+  ok('无分红数据时不做修正（盈亏 = -200）', Math.abs(nS.profit - (-200)) < 1e-6, 'got ' + nS.profit);
+  ok('无分红数据时不标记 dividendAdjusted', nS.dividendAdjusted === false);
+
+  /* ---- 末条记录为卖出时，「最近一次买入」指标仍必须有效 ---- */
+  const lPts = [
+    { ts: dd4('2026-01-01'), nav: 1.0 },
+    { ts: dd4('2026-01-05'), nav: 1.2 },
+    { ts: dd4('2026-01-10'), nav: 0.9 }
+  ];
+  const lRecs = [
+    { id: 'L1', code: 'X', type: 'buy', date: '2026-01-01', amount: 1000, createdAt: 1 },
+    { id: 'L2', code: 'X', type: 'buy', date: '2026-01-05', amount: 1000, createdAt: 2 },
+    { id: 'L3', code: 'X', type: 'sell', date: '2026-01-10', amount: 300, createdAt: 3 }
+  ];
+  const lS = sandbox.summarize(sandbox.enrichRecords(lRecs, { points: lPts }));
+  // 最近一次买入 1.2 → 最新 0.9 = -25%
+  ok('末条为卖出时 latestVsPrevBuy 取「最后一次买入」= -25%',
+     Math.abs(lS.latestVsPrevBuy - (-25)) < 1e-9, 'got ' + lS.latestVsPrevBuy);
+  ok('仅有一条买入时卖出点 vsPrev 相对该买入（+20%）',
+     Math.abs(sandbox.enrichRecords([
+       { id: 's1', code: 'X', type: 'buy', date: '2026-01-01', amount: 1000, createdAt: 1 },
+       { id: 's2', code: 'X', type: 'sell', date: '2026-01-05', amount: 300, createdAt: 2 }
+     ], { points: lPts })[1].vsPrev - 20) < 1e-9);
+}
 
 /* ============================================================
    汇总

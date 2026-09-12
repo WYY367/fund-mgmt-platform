@@ -29,7 +29,13 @@ for (let i = 0, t = d('2024-09-02'); t <= d('2026-09-11'); t += 24 * 3600 * 1000
   const wd = new Date(t).getDay();
   if (wd === 0 || wd === 6) continue;
   nav = Math.max(1.5, nav + (Math.sin(i / 7) * 0.012 - 0.0009));
-  DEMO_POINTS.push({ ts: t, nav: Number(nav.toFixed(4)), daily: Number((Math.sin(i / 3) * 1.2).toFixed(2)) });
+  // ac = 累计净值：这里让「累计每份分红」恒定 0.5，用于走通分红修正分支且不影响原口径期望值
+  DEMO_POINTS.push({
+    ts: t,
+    nav: Number(nav.toFixed(4)),
+    daily: Number((Math.sin(i / 3) * 1.2).toFixed(2)),
+    ac: Number((nav + 0.5).toFixed(4))
+  });
   i++;
 }
 const LAST = DEMO_POINTS[DEMO_POINTS.length - 1];
@@ -40,10 +46,10 @@ const FUND_DETAIL = {
     code: '110022',
     name: '易方达消费行业股票',
     points: DEMO_POINTS,
-    acPoints: [],
     updatedAt: LAST.ts,
     inceptionTs: DEMO_POINTS[0].ts,
-    full: true
+    full: true,
+    divDays: 0
   }
 };
 const SEARCH_RESULT = { ok: true, data: [{ code: '110022', name: '易方达消费行业股票' }] };
@@ -58,18 +64,43 @@ vc.on('log', () => {});
 vc.on('info', () => {});
 vc.on('debug', () => {});
 
-/* ---------- 模拟 fetch ---------- */
-function makeFetch(storeRef) {
+/* ---------- 模拟 fetch ----------
+   记录走 /api/store（含 rev 并发校验），净值缓存走 /api/nav（单只增量写入） */
+function makeFetch(storeRef, navRef) {
   return function (url, opts) {
     const u = String(url);
     const method = (opts && opts.method) || 'GET';
 
     if (u.indexOf('/api/store') === 0 && method === 'GET') {
-      return Promise.resolve(jsonRes({ ok: true, data: storeRef.data }));
+      return Promise.resolve(jsonRes({ ok: true, rev: storeRef.rev || 0, data: storeRef.data }));
     }
     if (u.indexOf('/api/store') === 0 && method === 'POST') {
-      try { storeRef.data = JSON.parse(opts.body); } catch (e) {}
-      return Promise.resolve(jsonRes({ ok: true, error: null }));
+      try {
+        const body = JSON.parse(opts.body);
+        if (typeof body.rev === 'number' && typeof storeRef.rev === 'number' && body.rev !== storeRef.rev) {
+          return Promise.resolve(jsonRes({ ok: false, conflict: true, rev: storeRef.rev, data: storeRef.data }));
+        }
+        storeRef.data = body;
+        storeRef.rev = (storeRef.rev || 0) + 1;
+      } catch (e) {}
+      return Promise.resolve(jsonRes({ ok: true, rev: storeRef.rev }));
+    }
+    if (u.indexOf('/api/nav') === 0) {
+      const qm = u.match(/code=(\d+)/);
+      if (method === 'GET') {
+        return Promise.resolve(jsonRes({ ok: true, data: { funds: navRef.funds } }));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(opts.body);
+        if (qm) navRef.funds[qm[1]] = body;
+        else navRef.funds = body.funds || {};
+        return Promise.resolve(jsonRes({ ok: true }));
+      }
+      if (method === 'DELETE') {
+        if (qm) delete navRef.funds[qm[1]];
+        else navRef.funds = {};
+        return Promise.resolve(jsonRes({ ok: true }));
+      }
     }
     if (u.indexOf('/api/fund/search') === 0) {
       return Promise.resolve(jsonRes(SEARCH_RESULT));
@@ -85,7 +116,8 @@ function jsonRes(obj) {
 }
 
 /* ---------- 启动 jsdom ---------- */
-const storeRef = { data: null };  // 服务端初始为空
+const storeRef = { data: null, rev: 0 };   // 记录文件（服务端初始为空）
+const navRef = { funds: {} };              // 净值缓存文件（服务端初始为空）
 
 const dom = new JSDOM(html, {
   runScripts: 'dangerously',
@@ -93,7 +125,7 @@ const dom = new JSDOM(html, {
   url: 'http://127.0.0.1:8765/',
   virtualConsole: vc,
   beforeParse(window) {
-    window.fetch = makeFetch(storeRef);
+    window.fetch = makeFetch(storeRef, navRef);
     window.AbortController = window.AbortController || function () {
       this.signal = {}; this.abort = function () {};
     };
@@ -164,11 +196,24 @@ function wait(ms) {
         !!fundHead && fundHead.textContent.indexOf('浮动盈亏') >= 0 &&
         fundHead.textContent.indexOf('成立以来最大回撤') >= 0,
         fundHead ? fundHead.textContent.slice(0, 80) : 'null');
-  check('启动自动升级标记已写入存储',
-        !!(storeRef.data && storeRef.data.funds && storeRef.data.funds['110022'] &&
-           storeRef.data.funds['110022'].full === true),
-        storeRef.data && storeRef.data.funds && storeRef.data.funds['110022']
-          ? 'full=' + storeRef.data.funds['110022'].full : 'no fund');
+  check('启动自动升级标记已写入净值缓存',
+        !!(navRef.funds['110022'] && navRef.funds['110022'].full === true),
+        navRef.funds['110022'] ? 'full=' + navRef.funds['110022'].full : 'no fund');
+  check('记录文件只存记录，不再夹带净值缓存',
+        !!(storeRef.data && !storeRef.data.funds && Array.isArray(storeRef.data.records)),
+        storeRef.data ? Object.keys(storeRef.data).join(',') : 'no store');
+  check('净值缓存已写入服务端（含累计净值字段），且数据量不落 localStorage',
+        !!(navRef.funds['110022'] && navRef.funds['110022'].points.length > 0 &&
+           navRef.funds['110022'].points[0].ac != null),
+        navRef.funds['110022'] ? JSON.stringify(navRef.funds['110022'].points[0]) : 'no points');
+  {
+    const ls = window.localStorage.getItem('wb_fund_workbench_records_v2');
+    let lsObj = null;
+    try { lsObj = ls ? JSON.parse(ls) : null; } catch (e) {}
+    check('localStorage 兜底只存记录（体积可控）',
+          !!(lsObj && Array.isArray(lsObj.records) && !lsObj.funds),
+          ls ? 'len=' + ls.length : 'empty');
+  }
 
   console.log('\n【2】图表渲染');
 

@@ -1,0 +1,12 @@
+# 运行时数据：包含你的真实持仓记录与净值缓存，绝不入库
+/data/
+
+# 测试临时产物
+.smoke/tmp-server/
+.smoke/tmp-*.log
+
+# 依赖与系统文件
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

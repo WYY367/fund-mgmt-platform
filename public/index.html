@@ -731,8 +731,8 @@ th.num { text-align: right; }
             <th class="num" data-page-node-id="lV3YHyJyZC5bHU7tChGPCO" style="text-align: center;">当日净值</th>
             <th class="num" data-page-node-id="lb65PhdyS3st1Dm2zOLI64" style="text-align: center;">份额</th>
             <th data-page-node-id="NVulndfz2Vv4UVPcsbZgda" style="text-align: left;">备注</th>
-            <th class="num" data-page-node-id="XsS7k6bzeQ7Hl69ttecDzl" style="text-align: center;">较上次买入</th>
-            <th class="num" data-page-node-id="3SJLijBt8bCmk2rkVbybEw" style="text-align: center;">持有至最新</th>
+            <th class="num" data-page-node-id="XsS7k6bzeQ7Hl69ttecDzl" style="text-align: center;" title="相对上一次买入的涨跌幅，已按累计净值口径计入分红">较上次买入</th>
+            <th class="num" data-page-node-id="3SJLijBt8bCmk2rkVbybEw" style="text-align: center;" title="相对最新净值的涨跌幅，已按累计净值口径计入分红">持有至最新</th>
             <th class="num" data-page-node-id="35iNeWcBfAcpir5GAQgIpE" style="text-align: center;">操作</th>
           </tr>
         </thead>
@@ -837,11 +837,11 @@ th.num { text-align: right; }
    一、常量与工具
    ================================================================ */
 var CFG = {
-  STORE_VERSION: 1,
-  LS_KEY: 'wb_fund_workbench_v1',
-  API_TIMEOUT: 20000,
-  // 净值为 0 / 缺失时的兜底
-  MAX_SYNC_LOG: 50
+  STORE_VERSION: 2,
+  // 记录（不可再生）写 localStorage 兜底；净值缓存只落服务端文件，避免几 MB 挤爆浏览器配额
+  LS_KEY: 'wb_fund_workbench_records_v2',
+  LS_KEY_LEGACY: 'wb_fund_workbench_v1',
+  API_TIMEOUT: 20000
 };
 
 var MS_DAY = 24 * 3600 * 1000;
@@ -926,7 +926,7 @@ function badgeClass(n) {
 
 function escapeHtml(s) {
   return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/><!--pnid:9LObR9vEGBvFA81ogzQCiM-->/g, '&gt;')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
@@ -938,12 +938,16 @@ function uid() {
    二、全局状态（唯一数据源，渲染层只读）
    ================================================================ */
 var state = {
-  funds: {},          // { code: { code, name, points[], acPoints[], updatedAt, full, fetchedAt } }
-  records: [],        // [{ id, code, date, amount, note, createdAt }]
+  funds: {},          // { code: { code, name, points[{ts,nav,daily,ac}], updatedAt, full, fetchedAt } }
+  records: [],        // [{ id, code, type, date, amount, note, createdAt }]
   currentCode: '',    // 当前查看的基金
   range: 'all',       // 图表区间
   syncState: 'local', // synced | syncing | local | error
   loading: false,
+  rev: 0,             // 服务端记录版本号（并发校验用）
+  dataCorrupt: null,  // 记录文件损坏时，隔离备份的文件名
+  navCorrupt: null,   // 净值缓存损坏时，隔离备份的文件名
+  legacyLocal: false, // 是否用到了旧版单 key 的本地兜底数据
   // 基金列表：手动顺序 / 置顶 / 表头排序（'' 表示拖拽手动模式）
   fundOrder: [],
   fundPinned: {},
@@ -957,15 +961,21 @@ var state = {
 };
 
 /* ================================================================
-   三、数据层：持久化
-   优先写本地文件（服务端），失败降级 localStorage
+   三、数据层
+   数据分两级，持久化路径也必须分开：
+     记录（不可再生）→ Store    ：localStorage 双写 + 服务端 records.json
+                                  + rev 并发校验 + 服务端写入前快照
+     净值缓存（可再生）→ NavCache：只写服务端 navCache.json，单只增量写入
+   把二者混在一个文件里，会导致每次加一条记录都要序列化几 MB，
+   也会让 localStorage 兜底在几只基金后触及配额而静默失效。
    ================================================================ */
 var Store = (function () {
 
+  /** 只序列化「记录侧」数据；净值缓存由 NavCache 单独负责 */
   function serialize() {
     return {
       version: CFG.STORE_VERSION,
-      funds: state.funds,
+      rev: state.rev,
       records: state.records,
       currentCode: state.currentCode,
       fundOrder: state.fundOrder,
@@ -977,7 +987,8 @@ var Store = (function () {
 
   function applyData(data) {
     if (!data || typeof data !== 'object') return false;
-    if (data.funds && typeof data.funds === 'object') state.funds = data.funds;
+    // 兼容旧版合并格式（含 funds）与新版仅记录格式
+    if (data.funds && typeof data.funds === 'object') state.funds = normalizeFunds(data.funds);
     if (Array.isArray(data.records)) {
       state.records = data.records;
       // 旧版本数据无 type 字段，统一归一为买入
@@ -989,28 +1000,49 @@ var Store = (function () {
     if (Array.isArray(data.fundOrder)) state.fundOrder = data.fundOrder;
     if (data.fundPinned && typeof data.fundPinned === 'object') state.fundPinned = data.fundPinned;
     if (data.fundSort && typeof data.fundSort === 'object') state.fundSort = data.fundSort;
+    if (typeof data.rev === 'number') state.rev = data.rev;
     return true;
   }
 
-  /** 从服务端本地文件读取 */
+  /**
+   * 从服务端本地文件读取记录
+   * 返回 'ok' | 'empty' | 'corrupt' | 'offline'
+   * corrupt：服务端已把损坏文件改名隔离保留，这里只标记、绝不覆盖
+   */
   function loadFromServer() {
     return fetch('/api/store', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (j && j.ok && j.data) return applyData(j.data);
-        return false;
+        if (j && j.corrupt) {
+          state.dataCorrupt = j.backup || true;
+          if (j.data) applyData(j.data);
+          return 'corrupt';
+        }
+        if (j && j.ok && j.data) {
+          applyData(j.data);
+          return (state.records.length || Object.keys(state.funds).length) ? 'ok' : 'empty';
+        }
+        return 'empty';
       })
-      .catch(function () { return false; });
+      .catch(function () { return 'offline'; });
   }
 
   function loadFromLocal() {
+    var applied = false;
     try {
       var raw = localStorage.getItem(CFG.LS_KEY);
-      if (!raw) return false;
-      return applyData(JSON.parse(raw));
-    } catch (e) {
-      return false;
-    }
+      if (raw) applied = applyData(JSON.parse(raw)) || applied;
+    } catch (e) { /* 本地数据损坏：忽略，不阻断启动 */ }
+    if (applied) return true;
+    // 旧版单 key（含净值缓存）：只作为最后兜底，迁移成功后即清理
+    try {
+      var legacy = localStorage.getItem(CFG.LS_KEY_LEGACY);
+      if (legacy) {
+        state.legacyLocal = true;
+        return applyData(JSON.parse(legacy));
+      }
+    } catch (e) { /* 同上 */ }
+    return false;
   }
 
   function saveToLocal() {
@@ -1022,57 +1054,225 @@ var Store = (function () {
     }
   }
 
-  /** 保存：本地文件为主，localStorage 永远同步写一份做双保险 */
-  function save() {
-    saveToLocal();
-    setSync('syncing');
+  /**
+   * 冲突解决：把选择权交给用户，绝不静默覆盖任何一侧
+   * 返回 true = 用本页数据覆盖；false = 已改为加载对方数据
+   */
+  function resolveConflict(serverData, serverRev) {
+    var srvCount = (serverData && serverData.records) ? serverData.records.length : 0;
+    var useMine = window.confirm(
+      '数据冲突：另一个窗口/标签页修改过数据。\n\n' +
+      '服务端：' + srvCount + ' 条记录\n本页：' + state.records.length + ' 条记录\n\n' +
+      '【确定】用本页数据覆盖（对方的改动会丢失）\n' +
+      '【取消】加载对方数据（本页尚未保存的改动会丢失）'
+    );
+    if (useMine) {
+      state.rev = serverRev;
+      return true;
+    }
+    applyData(serverData);
+    refreshAll();
+    toast('已加载另一个窗口的数据', 'ok');
+    return false;
+  }
+
+  /** 执行一次写入；遇到并发冲突时可让用户决策后重试一次（allowRetry） */
+  function write(payload, allowRetry) {
     return fetch('/api/store', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(serialize())
+      body: JSON.stringify(payload)
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().catch(function () { return null; });
+      })
       .then(function (j) {
-        if (j && j.ok) { setSync('synced'); return true; }
+        if (j && j.ok) {
+          if (typeof j.rev === 'number') state.rev = j.rev;
+          setSync('synced');
+          if (state.legacyLocal) {
+            // 服务端已经拿到数据，旧版单 key 可以释放了（其中大块是净值缓存）
+            state.legacyLocal = false;
+            try { localStorage.removeItem(CFG.LS_KEY_LEGACY); } catch (e) { /* 忽略 */ }
+          }
+          return true;
+        }
+        if (j && j.conflict) {
+          setSync('error');
+          if (!allowRetry) return false;
+          if (resolveConflict(j.data, j.rev)) return write(serialize(), false);
+          return false;
+        }
         setSync('error');
         return false;
       })
-      .catch(function () { setSync('error'); return false; });
+      .catch(function () { setSync('local'); return false; });
+  }
+
+  /** 保存记录：localStorage 永远先写一份兜底，再把记录写入服务端文件 */
+  function save() {
+    saveToLocal();
+    setSync('syncing');
+    return write(serialize(), true);
   }
 
   /**
    * 启动初始化：
    *  1) 优先读服务端本地文件
-   *  2) 服务端已有数据 → 用之
-   *  3) 服务端为空但本地有 → 用本地并推送到服务端
-   *  4) 都没有 → 空数据（由 Seed 决定是否预置示例）
+   *  2) 服务端为空/损坏/离线 → 用本地兜底，服务端可用时推回去
+   *  3) 都没有 → 空数据（由 boot 决定是否预置示例）
    */
   function init() {
-    var serverOk = false;
-    return loadFromServer()
-      .then(function (ok) {
-        serverOk = ok;
-        var hasServerData = ok && (state.records.length > 0 || Object.keys(state.funds).length > 0);
-        if (hasServerData) return true;
-        var hasLocal = loadFromLocal();
-        if (hasLocal) {
-          // 本地有数据、服务端没有 → 推送到服务端
-          return save();
-        }
-        return false;
-      })
-      .then(function () {
-        setSync(serverOk ? 'synced' : 'local');
-        return serverOk;
-      });
+    return loadFromServer().then(function (mode) {
+      setSync(mode === 'offline' ? 'local' : 'synced');
+      if (mode === 'ok' && state.records.length) return mode;
+      if (loadFromLocal()) {
+        if (mode === 'ok' || mode === 'empty') return save().then(function () { return mode; });
+      }
+      return mode;
+    });
   }
 
   return { init: init, save: save, saveToLocal: saveToLocal, serialize: serialize, applyData: applyData };
 })();
 
+/* ---------- 净值缓存（可再生数据，只落服务端文件） ---------- */
+var NavCache = (function () {
+
+  function load() {
+    return fetchJson('/api/nav')
+      .then(function (j) {
+        if (j && j.corrupt) state.navCorrupt = j.backup || true;
+        if (j && j.data && j.data.funds) {
+          state.funds = normalizeFunds(j.data.funds);
+          return (j.ok === true);
+        }
+        return false;
+      })
+      .catch(function () { return false; });
+  }
+
+  /** 写入单只基金（增量写入，避免整包几 MB 反复搬运） */
+  function put(code) {
+    var fund = state.funds[code];
+    if (!fund) return Promise.resolve(false);
+    return fetchJson('/api/nav?code=' + encodeURIComponent(code), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fund)
+    })
+      .then(function (j) { return !!(j && j.ok); })
+      .catch(function () { return false; });
+  }
+
+  function remove(code) {
+    return fetch('/api/nav?code=' + encodeURIComponent(code), { method: 'DELETE' })
+      .then(function () { return true; })
+      .catch(function () { return false; });
+  }
+
+  /** 整体替换（导入备份 / 旧版本地数据迁移时使用） */
+  function pushAll() {
+    return fetchJson('/api/nav', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ funds: state.funds })
+    })
+      .then(function (j) { return !!(j && j.ok); })
+      .catch(function () { return false; });
+  }
+
+  return { load: load, put: put, remove: remove, pushAll: pushAll };
+})();
+
 /* ================================================================
    四、计算层：纯函数（无副作用、不碰 DOM）
    ================================================================ */
+
+/** 单个净值点规范化：ts / nav / daily / ac（累计净值） */
+function normalizePoint(p) {
+  if (!p || typeof p.ts !== 'number' || typeof p.nav !== 'number' || !(p.nav > 0)) return null;
+  return {
+    ts: p.ts,
+    nav: p.nav,
+    daily: (typeof p.daily === 'number') ? p.daily : null,
+    ac: (typeof p.ac === 'number' && p.ac > 0) ? p.ac : null
+  };
+}
+
+/** 净值序列规范化：兼容旧格式（points 无 ac，另有 acPoints 序列） */
+function normalizePoints(points, acPoints) {
+  if (!Array.isArray(points)) return [];
+  var out = [], i;
+  var needsMerge = false;
+  for (i = 0; i < points.length; i++) {
+    if (points[i] && points[i].ac === undefined) { needsMerge = true; break; }
+  }
+  var acMap = null;
+  if (needsMerge && Array.isArray(acPoints)) {
+    acMap = {};
+    for (i = 0; i < acPoints.length; i++) {
+      var a = acPoints[i];
+      if (a && typeof a.ts === 'number' && typeof a.nav === 'number') acMap[a.ts] = a.nav;
+    }
+  }
+  for (i = 0; i < points.length; i++) {
+    var src = points[i];
+    if (acMap && src && src.ac === undefined && acMap.hasOwnProperty(src.ts)) {
+      src = { ts: src.ts, nav: src.nav, daily: src.daily, ac: acMap[src.ts] };
+    }
+    var np = normalizePoint(src);
+    if (np) out.push(np);
+  }
+  return out;
+}
+
+/** 单只基金规范化 */
+function normalizeFund(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.code) return null;
+  var points = normalizePoints(raw.points, raw.acPoints);
+  if (!points.length) return null;
+  return {
+    code: raw.code,
+    name: raw.name || raw.code,
+    points: points,
+    full: raw.full === true,
+    inceptionTs: (typeof raw.inceptionTs === 'number') ? raw.inceptionTs : points[0].ts,
+    updatedAt: raw.updatedAt || null,
+    fetchedAt: raw.fetchedAt || 0
+  };
+}
+
+/** 基金集合规范化 */
+function normalizeFunds(funds) {
+  var out = {};
+  if (!funds || typeof funds !== 'object') return out;
+  var keys = Object.keys(funds);
+  for (var i = 0; i < keys.length; i++) {
+    var f = normalizeFund(funds[keys[i]]);
+    if (f) out[keys[i]] = f;
+  }
+  return out;
+}
+
+/**
+ * 分红修正后的涨跌幅（%）：从 fromPt 持有到 toPt
+ *
+ * 单位净值会被分红除权"打下去"，直接用 nav 比较会把分红日误判成下跌/抄底。
+ * 令 D = 累计净值 − 单位净值（= 累计每份分红），则
+ *   每份价值变化 = (to.nav + (to.D − from.D)) − from.nav
+ * 两端都有累计净值时才做修正；缺任一端的 ac（旧数据/上游缺字段）则
+ * 退化为纯单位净值口径，与修正前行为一致。
+ */
+function adjReturnPct(fromPt, toPt) {
+  if (!fromPt || !toPt) return null;
+  if (!(fromPt.nav > 0)) return null;
+  var value = toPt.nav;
+  if (fromPt.ac != null && toPt.ac != null) {
+    value = toPt.nav + ((toPt.ac - toPt.nav) - (fromPt.ac - fromPt.nav));
+  }
+  return ((value - fromPt.nav) / fromPt.nav) * 100;
+}
 
 /** 二分查找：找出「日期 <= ts」的最后一个净值点 */
 function findNavOnOrBefore(points, ts) {
@@ -1094,14 +1294,14 @@ function latestPoint(points) {
 }
 
 /**
- * 核心：把某基金的买入记录（按日期升序）加工成带计算字段的数组
+ * 核心：把某基金的买卖记录（按日期升序）加工成带计算字段的数组
  * 每条附加：
  *   nav        当日（或之前最近交易日）单位净值
- *   shares     份额 = 金额 / 净值
- *   prevNav    上一次买入的净值
- *   vsPrev     相对上一次买入的涨跌幅 %
- *   vsLatest   相对最新净值的涨跌幅 %（持有至最新）
- *   holding    持有市值（份额 × 最新净值）
+ *   ac         当日累计净值（分红修正用，可能为 null）
+ *   shares     份额 = 金额 / 单位净值（真实买入价口径，不含申赎费）
+ *   vsPrev     相对上一次买入的涨跌幅 %（含分红修正）
+ *   vsLatest   相对最新净值的涨跌幅 %（仅买入，含分红修正）
+ *   remainingShares  该笔之后累计剩余份额
  */
 function enrichRecords(records, fund) {
   var points = (fund && fund.points) || [];
@@ -1114,7 +1314,7 @@ function enrichRecords(records, fund) {
   });
 
   var out = [];
-  var lastBuyNav = null;   // 上一「买入」的净值（卖出点也用它来比较）
+  var lastBuyPoint = null; // 上一「买入」的净值点（卖出点也用它来比较）
   var cumShares = 0;       // 累计持有份额（买入 +，卖出 −）
 
   for (var i = 0; i < sorted.length; i++) {
@@ -1133,31 +1333,33 @@ function enrichRecords(records, fund) {
       note: r.note || '',
       createdAt: r.createdAt || 0,
       nav: nav,
+      ac: navPoint ? navPoint.ac : null,
       navDate: navPoint ? toDateStr(navPoint.ts) : null,
       // 买入日当天净值可能比实际日期早（非交易日顺延），标记出来
       navIsExact: navPoint ? toDateStr(navPoint.ts) === r.date : false,
       shares: null,
-      vsPrev: null,        // 相对上一次「买入」的涨跌幅 %
-      vsLatest: null,      // 仅买入：相对最新净值的涨跌幅 %
+      vsPrev: null,        // 相对上一次「买入」的涨跌幅 %（含分红修正）
+      vsLatest: null,      // 仅买入：相对最新净值的涨跌幅 %（含分红修正）
       remainingShares: null,
-      latestNav: last ? last.nav : null
+      latestNav: last ? last.nav : null,
+      latestAc: last ? last.ac : null
     };
 
     if (nav && nav > 0) {
       item.shares = item.amount / nav;
       cumShares += (type === 'buy' ? item.shares : -item.shares);
       item.remainingShares = cumShares;
-      if (type === 'buy' && last && last.nav > 0) {
-        item.vsLatest = ((last.nav - nav) / nav) * 100;
+      if (type === 'buy' && last) {
+        item.vsLatest = adjReturnPct(navPoint, last);
       }
     }
 
     // 买入/卖出点都相对「上一次买入价」比较
-    if (lastBuyNav && nav && lastBuyNav > 0) {
-      item.vsPrev = ((nav - lastBuyNav) / lastBuyNav) * 100;
+    if (lastBuyPoint && navPoint) {
+      item.vsPrev = adjReturnPct(lastBuyPoint, navPoint);
     }
-    if (type === 'buy' && nav && nav > 0) {
-      lastBuyNav = nav;
+    if (type === 'buy' && navPoint) {
+      lastBuyPoint = navPoint;
     }
 
     out.push(item);
@@ -1166,17 +1368,20 @@ function enrichRecords(records, fund) {
   return out;
 }
 
-/** 汇总统计（份额法：剩余份额 × 最新净值 + 卖出回款 − 投入本金） */
+/** 汇总统计（份额法：剩余份额 × 最新每股价值 + 卖出回款 − 投入本金；每股价值含现金分红修正） */
 function summarize(enriched) {
   var buyAmount = 0, sellAmount = 0, buyShares = 0, sellShares = 0;
   var hasNav = false, winCount = 0, validVsPrev = 0;
   var buyCount = 0, sellCount = 0;
   var latestVsPrevBuy = null;
-  var latestNav = null;
+  var latestNav = null, latestAc = null;
+  var sumSharesDiv = 0;    // Σ(买入份额 × 买入时点的累计每份分红)
+  var adjApplied = false;
 
   for (var i = 0; i < enriched.length; i++) {
     var it = enriched[i];
     if (it.latestNav != null) latestNav = it.latestNav;
+    if (it.latestAc != null) latestAc = it.latestAc;
     if (it.type === 'sell') {
       sellCount++;
       sellAmount += it.amount;
@@ -1184,7 +1389,11 @@ function summarize(enriched) {
     } else {
       buyCount++;
       buyAmount += it.amount;
-      if (it.shares != null) { buyShares += it.shares; hasNav = true; }
+      if (it.shares != null) {
+        buyShares += it.shares;
+        hasNav = true;
+        if (it.ac != null && it.latestAc != null) sumSharesDiv += it.shares * (it.ac - it.nav);
+      }
       if (it.vsPrev != null) {
         validVsPrev++;
         if (it.vsPrev < 0) winCount++;  // 相对上次买在更低位 = 补到了更便宜的价
@@ -1192,12 +1401,22 @@ function summarize(enriched) {
     }
   }
 
-  if (enriched.length) {
-    latestVsPrevBuy = enriched[enriched.length - 1].vsLatest;
+  // 「最近一次买入」必须落在买入记录上：最后一条记录可能是卖出
+  for (var j = enriched.length - 1; j >= 0; j--) {
+    if (enriched[j].type === 'buy') { latestVsPrevBuy = enriched[j].vsLatest; break; }
   }
 
   var remainingShares = buyShares - sellShares;
-  var holding = hasNav && latestNav ? remainingShares * latestNav : null;
+  var holding = null;
+  if (hasNav && latestNav) {
+    var perShare = latestNav;
+    if (latestAc != null && buyShares > 0) {
+      // 分红修正：每股价值 = 最新单位净值 + (最新累计每份分红 − 买入时点累计每份分红)
+      perShare = latestNav + ((latestAc - latestNav) - (sumSharesDiv / buyShares));
+      adjApplied = true;
+    }
+    holding = remainingShares * perShare;
+  }
   var profit = hasNav ? (holding + sellAmount - buyAmount) : null;
   var profitRate = hasNav && buyAmount > 0 ? (profit / buyAmount) * 100 : null;
   var avgCost = hasNav && buyShares > 0 ? buyAmount / buyShares : null;
@@ -1216,7 +1435,9 @@ function summarize(enriched) {
     // 相对上一次买入在更低价位的次数（"抄底"次数）
     cheaperCount: winCount,
     validVsPrev: validVsPrev,
-    latestVsPrevBuy: latestVsPrevBuy
+    latestVsPrevBuy: latestVsPrevBuy,
+    // 本次统计是否已按累计净值做分红修正
+    dividendAdjusted: adjApplied
   };
 }
 
@@ -1287,6 +1508,24 @@ function renderTodayZone() {
 
   var items = [];
 
+  // 0) 存储异常优先提示：损坏文件已被隔离保留，绝不用示例数据覆盖
+  if (state.dataCorrupt) {
+    items.push({
+      level: 'danger',
+      text: '记录文件损坏，已隔离保留为 ' + (typeof state.dataCorrupt === 'string' ? state.dataCorrupt : '备份文件') +
+            '（未做任何覆盖）。如需恢复，可用该文件或「导入」备份；新记录会写入新的记录文件。',
+      action: null
+    });
+  }
+  if (state.navCorrupt) {
+    items.push({
+      level: 'warn',
+      text: '净值缓存损坏（已隔离保留为 ' + (typeof state.navCorrupt === 'string' ? state.navCorrupt : '备份文件') +
+            '）。净值可从上游重新拉取，点「加载净值」即可重建。',
+      action: null
+    });
+  }
+
   // 1) 有买入记录的基金，其最新净值数据是否过期
   var codes = Object.keys(state.funds);
   for (var i = 0; i < codes.length; i++) {
@@ -1330,21 +1569,23 @@ function renderTodayZone() {
     }
   }
 
-  // 3) 最近一次买入后跌幅较大（机会提示）
+  // 3) 最近一次「买入」后跌幅较大（机会提示）
+  //    注意：必须取最后一次买入记录，最后一条记录可能是卖出
   if (state.currentCode && state.funds[state.currentCode]) {
     var fund = state.funds[state.currentCode];
     var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
     var en = enrichRecords(recs, fund);
-    if (en.length) {
-      var lastRec = en[en.length - 1];
-      if (lastRec.vsLatest != null && lastRec.vsLatest <= -10) {
-        items.push({
-          level: 'info',
-          text: '《' + fund.name + '》现价较你最近一次买入（' + lastRec.date + '）已' +
-                fmtPct(lastRec.vsLatest) + '，可考虑是否补仓',
-          action: null
-        });
-      }
+    var lastBuy = null;
+    for (var lb = en.length - 1; lb >= 0; lb--) {
+      if (en[lb].type === 'buy') { lastBuy = en[lb]; break; }
+    }
+    if (lastBuy && lastBuy.vsLatest != null && lastBuy.vsLatest <= -10) {
+      items.push({
+        level: 'info',
+        text: '《' + fund.name + '》现价较你最近一次买入（' + lastBuy.date + '）已' +
+              fmtPct(lastBuy.vsLatest) + '，可考虑是否补仓',
+        action: null
+      });
     }
   }
 
@@ -1601,7 +1842,7 @@ function deleteFund(code) {
         state.currentCode = state.records.length ? state.records[0].code : (Object.keys(state.funds)[0] || '');
       }
       state.batch.selected = {};
-      Store.save().then(function () {
+      Promise.all([Store.save(), NavCache.remove(code)]).then(function () {
         refreshAll();
         toast('已删除 ' + name, 'ok');
       });
@@ -1809,14 +2050,19 @@ function renderChart() {
   legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#26c281"></span>买入点（较上次下跌）</span>';
   legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#8d95a8"></span>首次买入（基准）</span>';
   legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff9f43;border-radius:2px;transform:rotate(45deg)"></span>卖出点（较上次买入）</span>';
-  if (enriched.length) {
-    var lastIt = enriched[enriched.length - 1];
-    if (lastIt.vsLatest != null) {
-      legendHtml += '<span class="legend-item" style="margin-left:auto">' +
-        '最新净值相对最近一次买入：<span class="badge ' + badgeClass(lastIt.vsLatest) + '">' +
-        fmtPct(lastIt.vsLatest) + '</span></span>';
-    }
+  // 「最近一次买入」要落到买入记录上（最后一条记录可能是卖出）
+  var lastBuyIt = null;
+  for (var lbf = enriched.length - 1; lbf >= 0; lbf--) {
+    if (enriched[lbf].type === 'buy') { lastBuyIt = enriched[lbf]; break; }
   }
+  if (lastBuyIt && lastBuyIt.vsLatest != null) {
+    legendHtml += '<span class="legend-item">' +
+      '最新净值相对最近一次买入：<span class="badge ' + badgeClass(lastBuyIt.vsLatest) + '">' +
+      fmtPct(lastBuyIt.vsLatest) + '</span></span>';
+  }
+  // 口径披露：涨跌幅按含分红的复权口径，份额按单位净值折算
+  legendHtml += '<span class="legend-item" style="margin-left:auto;color:var(--text-faint);font-size:12px">' +
+                '涨跌幅含分红（累计净值口径）· 份额按单位净值折算</span>';
   $('chartLegend').innerHTML = legendHtml;
 }
 
@@ -1832,7 +2078,7 @@ function renderStats() {
 
   if (!fund || en.length === 0) {
     grid.innerHTML =
-      card('买入笔数', s.count + ' 笔', '') +
+      card('操作笔数', s.count + ' 笔', '') +
       card('投入本金', '¥' + fmtMoney(s.totalAmount), '') +
       card('浮动盈亏', '<span class="val-flat">—</span>', '需加载净值数据');
     return;
@@ -1850,7 +2096,8 @@ function renderStats() {
     card('浮动盈亏',
          s.profitRate == null ? '<span class="val-flat">—</span>'
            : '<span class="' + profitCls + '">' + fmtPct(s.profitRate) + '</span>',
-         s.profitRate == null ? '需加载净值数据' : '相对投入本金');
+         s.profitRate == null ? '需加载净值数据'
+           : (s.dividendAdjusted ? '相对投入本金 · 已计入现金分红' : '相对投入本金'));
 }
 
 function card(label, value, note) {
@@ -2395,20 +2642,28 @@ function loadFundNav(code, silent, keepCurrent) {
     .then(function (j) {
       if (!j || !j.ok) throw new Error((j && j.error) || '加载失败');
       var d = j.data;
-      state.funds[d.code] = {
+      var norm = normalizeFund({
         code: d.code,
         name: d.name,
         points: d.points || [],
-        acPoints: d.acPoints || [],
         updatedAt: d.updatedAt,
         full: d.full === true,
-        inceptionTs: d.inceptionTs || ((d.points && d.points.length) ? d.points[0].ts : null),
+        inceptionTs: d.inceptionTs,
         fetchedAt: Date.now()
-      };
+      });
+      // 规范化失败（空序列/结构异常）时绝不能写入 null，否则后续渲染会踩空
+      if (!norm) throw new Error('净值数据为空或格式异常');
+      state.funds[d.code] = norm;
       if (!keepCurrent) state.currentCode = d.code;
-      return Store.save().then(function () {
+      // 记录走 Store（小、需兜底），净值缓存走 NavCache（大、只落文件）
+      return Promise.all([NavCache.put(d.code), Store.save()]).then(function (res) {
         refreshAll();
-        if (!silent) toast('已加载《' + d.name + '》共 ' + (d.points || []).length + ' 个交易日净值', 'ok');
+        if (!res[0]) {
+          toast('净值已加载到页面，但写入本地缓存失败（刷新后需重新加载）', 'err');
+        } else if (!silent) {
+          toast('已加载《' + d.name + '》共 ' + (d.points || []).length + ' 个交易日净值' +
+                (d.divDays ? '（含 ' + d.divDays + ' 个分红日，涨跌幅已按累计净值修正）' : ''), 'ok');
+        }
         return true;
       });
     })
@@ -2505,9 +2760,12 @@ function editRecord(id) {
   });
 }
 
-/** 导出 JSON */
+/** 导出 JSON（完整备份：记录 + 净值缓存，导入时可整体还原） */
 function exportJson() {
   var data = Store.serialize();
+  delete data.rev;              // 版本号属于服务端运行时状态，不进备份文件
+  data.funds = state.funds;     // 备份必须含净值缓存，否则换机后要重新拉取
+  data.exportedAt = Date.now();
   var str = JSON.stringify(data, null, 2);
   var blob = new Blob([str], { type: 'application/json;charset=utf-8' });
   var url = URL.createObjectURL(blob);
@@ -2521,7 +2779,7 @@ function exportJson() {
   setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
 
   var n = state.records.length;
-  toast('已导出备份（' + n + ' 条买入记录 · ' + Object.keys(state.funds).length + ' 只基金）', 'ok');
+  toast('已导出备份（' + n + ' 条记录 · ' + Object.keys(state.funds).length + ' 只基金）', 'ok');
 }
 
 /** 导入 JSON */
@@ -2547,9 +2805,11 @@ function importJson(file) {
           if (!state.currentCode && state.records.length) {
             state.currentCode = state.records[0].code;
           }
-          Store.save().then(function () {
+          // 记录入 Store，净值缓存整体替换进 NavCache
+          Promise.all([Store.save(), NavCache.pushAll()]).then(function () {
             refreshAll();
-            toast('导入成功：' + state.records.length + ' 条记录', 'ok');
+            toast('导入成功：' + state.records.length + ' 条记录 · ' +
+                  Object.keys(state.funds).length + ' 只基金', 'ok');
           });
         }
       );
@@ -3119,6 +3379,18 @@ function bindEvents() {
   /* ---- 窗口滚动时隐藏浮层与十字线 ---- */
   window.addEventListener('scroll', function () { hidePopup(); hideChartCrosshair(); }, { passive: true });
   window.addEventListener('resize', function () { hidePopup(); hideChartCrosshair(); }, { passive: true });
+
+  /* ---- 跨标签页同步：另一窗口保存后自动拉平，减少覆盖冲突 ---- */
+  window.addEventListener('storage', function (e) {
+    if (!e || e.key !== CFG.LS_KEY || !e.newValue) return;
+    try {
+      var d = JSON.parse(e.newValue);
+      if (!d || !Array.isArray(d.records)) return;
+      Store.applyData(d);
+      refreshAll();
+      toast('已同步另一个窗口的改动', 'ok');
+    } catch (err) { /* 忽略异常数据 */ }
+  });
 }
 
 /* ================================================================
@@ -3136,10 +3408,17 @@ function boot() {
   bindEvents();
 
   Store.init()
+    .then(function () { return NavCache.load(); })
     .then(function () {
-      // 首次打开且完全无数据 → 预置示例
-      if (state.records.length === 0 && Object.keys(state.funds).length === 0) {
+      // 记录文件损坏时不预置示例数据：避免在用户数据异常时又制造一份"看起来正常"的数据
+      if (!state.dataCorrupt && state.records.length === 0 && Object.keys(state.funds).length === 0) {
         seedDemoData();
+      }
+      // 旧版本地兜底数据（含净值缓存）→ 推到服务端，之后释放那个大 key
+      if (state.legacyLocal && Object.keys(state.funds).length) {
+        NavCache.pushAll().then(function (ok) {
+          if (ok) toast('已把本地旧版数据迁移到本地文件', 'ok');
+        });
       }
       // 若当前基金有记录但未加载净值，自动静默加载
       var need = null;
@@ -3152,12 +3431,17 @@ function boot() {
 
       refreshAll();
 
+      if (state.dataCorrupt) {
+        toast('记录文件损坏：已隔离保留为 ' +
+              (typeof state.dataCorrupt === 'string' ? state.dataCorrupt : '备份文件') + '，未做覆盖', 'err');
+      }
+
       // 旧数据升级：净值仅含近5年的基金 → 静默拉取成立以来全部历史（逐只串行）
       function startUpgrade() {
         var upgrade = [];
         for (var code in state.funds) {
           if (state.funds.hasOwnProperty(code) &&
-              state.funds[code].points && state.funds[code].points.length &&
+              state.funds[code] && state.funds[code].points && state.funds[code].points.length &&
               state.funds[code].full !== true) {
             upgrade.push(code);
           }

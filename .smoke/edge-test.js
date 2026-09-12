@@ -24,7 +24,8 @@ const ts = (s) => new Date(s + 'T00:00:00').getTime();
 
 /* 启动一个 jsdom 实例 */
 function boot(opts) {
-  const storeRef = { data: opts.store || null };
+  const storeRef = { data: opts.store || null, rev: 0 };
+  const navRef = { funds: (opts.nav && opts.nav.funds) || {} };
   const errors = [];
   const vc = new VirtualConsole();
   vc.on('jsdomError', (e) => errors.push(String(e.message || e)));
@@ -33,6 +34,7 @@ function boot(opts) {
 
   const fundResp = opts.fund || makeFund([]);
   const failing = opts.failApi;
+  const corrupt = !!opts.corrupt;
 
   const dom = new JSDOM(html, {
     runScripts: 'dangerously',
@@ -44,11 +46,36 @@ function boot(opts) {
         const u = String(url);
         const method = (o && o.method) || 'GET';
         if (failing) return Promise.reject(new Error('模拟网络故障'));
-        if (u.indexOf('/api/store') === 0 && method === 'GET')
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: storeRef.data }) });
+        if (u.indexOf('/api/store') === 0 && method === 'GET') {
+          // 模拟服务端：记录文件损坏 → 返回 corrupt 标记（文件已在服务端隔离保留）
+          if (corrupt) {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({
+              ok: false, corrupt: true, backup: 'records.json.corrupt-20260912-220000.bak',
+              rev: 0, data: { version: 2, rev: 0, records: [], currentCode: '', fundOrder: [], fundPinned: {}, fundSort: { key: '', dir: 'desc' } }
+            }) });
+          }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, rev: storeRef.rev, data: storeRef.data }) });
+        }
         if (u.indexOf('/api/store') === 0 && method === 'POST') {
-          try { storeRef.data = JSON.parse(o.body); } catch (e) {}
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+          try { storeRef.data = JSON.parse(o.body); storeRef.rev++; } catch (e) { }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, rev: storeRef.rev }) });
+        }
+        if (u.indexOf('/api/nav') === 0) {
+          const qm = u.match(/code=(\d+)/);
+          if (method === 'GET') {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: { funds: navRef.funds } }) });
+          }
+          if (method === 'POST') {
+            try {
+              const body = JSON.parse(o.body);
+              if (qm) navRef.funds[qm[1]] = body; else navRef.funds = body.funds || {};
+            } catch (e) { }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+          }
+          if (method === 'DELETE') {
+            if (qm) delete navRef.funds[qm[1]];
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+          }
         }
         if (u.indexOf('/api/fund/search') === 0)
           return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: [{ code: '999999', name: '测试基金' }] }) });
@@ -60,7 +87,7 @@ function boot(opts) {
       window.matchMedia = window.matchMedia || function () { return { matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }; };
     }
   });
-  return { dom, window: dom.window, doc: dom.window.document, storeRef, errors };
+  return { dom, window: dom.window, doc: dom.window.document, storeRef, navRef, errors };
 }
 
 (async function main() {
@@ -190,18 +217,30 @@ function boot(opts) {
     window.close();
   }
 
-  /* ---------- 6. 数据损坏恢复 ---------- */
-  console.log('\n【6】存储数据损坏');
+  /* ---------- 6. 数据损坏与异常结构 ---------- */
+  console.log('\n【6】存储数据损坏 / 结构异常');
   {
-    const { doc, window, storeRef } = boot({
-      store: { version: 1, funds: 'THIS_IS_NOT_AN_OBJECT', records: null, currentCode: 12345 }
-    });
+    // 6a) 服务端明确返回「文件损坏」→ 页面降级，且绝不用示例数据覆盖
+    const a = boot({ corrupt: true });
     await wait(1200);
-    check('损坏数据未导致崩溃', doc.getElementById('todayZone').innerHTML.length > 0);
-    check('自动重置为示例数据',
-          storeRef.data && Array.isArray(storeRef.data.records) && storeRef.data.records.length === 5,
-          storeRef.data ? JSON.stringify(storeRef.data.records && storeRef.data.records.length) : 'null');
-    window.close();
+    check('损坏时页面未崩溃', a.doc.getElementById('todayZone').innerHTML.length > 0);
+    check('明确提示已隔离保留（含备份文件名）',
+          a.doc.getElementById('todayZone').textContent.indexOf('隔离保留') >= 0 &&
+          a.doc.getElementById('todayZone').textContent.indexOf('.bak') >= 0,
+          a.doc.getElementById('todayZone').textContent.slice(0, 90));
+    check('损坏时不再写入（不覆盖、不预置示例数据）',
+          a.storeRef.data === null,
+          a.storeRef.data ? 'records=' + (a.storeRef.data.records || []).length : 'null');
+    a.window.close();
+
+    // 6b) 服务端返回结构异常但可解析 → 页面按空数据处理，仍可用
+    const b = boot({ store: { version: 1, funds: 'THIS_IS_NOT_AN_OBJECT', records: null, currentCode: 12345 } });
+    await wait(1200);
+    check('异常结构未导致崩溃', b.doc.getElementById('todayZone').innerHTML.length > 0);
+    check('异常结构按空数据处理并预置示例',
+          b.storeRef.data && Array.isArray(b.storeRef.data.records) && b.storeRef.data.records.length === 5,
+          b.storeRef.data ? String(b.storeRef.data.records && b.storeRef.data.records.length) : 'null');
+    b.window.close();
   }
 
   /* ---------- 7. 大数据量（1000 条记录 + 1200 净值点） ---------- */
@@ -249,9 +288,13 @@ function boot(opts) {
     await wait(1500);
     check('接口全挂时页面仍可用', doc.getElementById('todayZone').innerHTML.length > 0);
     let lsSaved = null;
-    try { lsSaved = JSON.parse(window.localStorage.getItem('wb_fund_workbench_v1') || 'null'); } catch (e) {}
+    try { lsSaved = JSON.parse(window.localStorage.getItem('wb_fund_workbench_records_v2') || 'null'); } catch (e) {}
     check('接口故障时 localStorage 兜底保存成功', !!(lsSaved && lsSaved.records && lsSaved.records.length === 5),
           lsSaved ? 'records=' + (lsSaved.records || []).length : 'null');
+    check('兜底数据不含净值缓存（体积可控）', !!(lsSaved && !lsSaved.funds));
+    check('HTTP 模式标记为本地模式',
+          (doc.getElementById('syncText') || {}).textContent === '本地模式',
+          (doc.getElementById('syncText') || {}).textContent);
     check('未抛未捕获异常',
           errors.filter((e) => /Unhandled|uncaught/i.test(e)).length === 0);
     window.close();
