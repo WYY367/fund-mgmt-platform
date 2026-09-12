@@ -1,0 +1,3203 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="KPrftnzHvybjHhDlQSXRl1" data-dm-ref="4" style=""><head data-page-node-id="jJRAcrr0vBZTTQH78Ne9RT">
+<meta charset="UTF-8" data-page-node-id="o1C6q7MtKBOpWMESJLHnOA">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" data-page-node-id="4aAFkGYziK037r2gNGb6ID">
+<title>基金买入工作台</title>
+<style>
+/* ================================================================
+   基础与主题
+   ================================================================ */
+:root {
+  --bg: #0f1116;
+  --bg-soft: #161922;
+  --card: #1b1f2a;
+  --card-hover: #222736;
+  --border: #2a3040;
+  --border-soft: #232837;
+  --text: #e8ebf2;
+  --text-dim: #8d95a8;
+  --text-faint: #5f6779;
+  --accent: #4f8cff;
+  --accent-soft: rgba(79, 140, 255, .14);
+  --up: #ff5b5b;      /* 涨 = 红（国内习惯） */
+  --down: #26c281;    /* 跌 = 绿 */
+  --warn: #ffb020;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 4px 20px rgba(0,0,0,.35);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; }
+input, select { font-family: inherit; }
+
+/* ================================================================
+   布局骨架
+   ================================================================ */
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 18px 60px;
+}
+
+/* 顶栏 */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark {
+  width: 38px; height: 38px; flex: 0 0 38px;
+  border-radius: 11px;
+  background: linear-gradient(140deg, #4f8cff, #7a5cff);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(79,140,255,.34);
+}
+.brand-title { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
+.brand-sub { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+
+.topbar-right { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+/* 同步状态指示器 */
+.sync-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.sync-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-faint); flex: 0 0 7px;
+}
+.sync-badge[data-state="synced"] .sync-dot { background: var(--down); box-shadow: 0 0 0 3px rgba(38,194,129,.16); }
+.sync-badge[data-state="syncing"] .sync-dot { background: var(--warn); animation: pulse 1s infinite; }
+.sync-badge[data-state="local"] .sync-dot { background: var(--text-faint); }
+.sync-badge[data-state="error"] .sync-dot { background: var(--up); box-shadow: 0 0 0 3px rgba(255,91,91,.16); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+/* 通用按钮 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 38px; padding: 0 15px;
+  border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 500;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border);
+  transition: background .16s, border-color .16s, transform .1s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--card-hover); border-color: #35405a; }
+.btn:active { transform: scale(.975); }
+.btn-primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  box-shadow: 0 3px 12px rgba(79,140,255,.3);
+}
+.btn-primary:hover { background: #6a9dff; border-color: #6a9dff; }
+.btn-ghost { background: transparent; border-color: var(--border-soft); color: var(--text-dim); }
+.btn-ghost:hover { color: var(--text); border-color: var(--border); }
+.btn-sm { height: 32px; padding: 0 11px; font-size: 13px; border-radius: 8px; }
+.btn-danger { color: var(--up); border-color: rgba(255,91,91,.3); }
+.btn-danger:hover { background: rgba(255,91,91,.1); border-color: rgba(255,91,91,.5); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ================================================================
+   卡片与分区
+   ================================================================ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 15px;
+}
+.card-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 650;
+}
+.card-title svg { color: var(--accent); flex: 0 0 auto; }
+
+/* ================================================================
+   基金选择器
+   ================================================================ */
+.picker-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+
+.picker-input-wrap { position: relative; flex: 1 1 260px; min-width: 0; }
+
+.field-input {
+  width: 100%; height: 42px;
+  padding: 0 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 16px;   /* >=16px 防止 iOS 自动放大 */
+  outline: none;
+  transition: border-color .16s, box-shadow .16s;
+}
+.field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field-input::placeholder { color: var(--text-faint); }
+
+/* 搜索下拉 */
+.suggest {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: #1e2330;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  z-index: 60;
+  max-height: 296px; overflow-y: auto;
+  display: none;
+}
+.suggest.show { display: block; }
+.suggest-item {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 10px 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 14px;
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover, .suggest-item.active { background: rgba(79,140,255,.12); }
+.suggest-code { color: var(--accent); font-weight: 600; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.suggest-name { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-empty { padding: 14px; color: var(--text-faint); font-size: 13.5px; text-align: center; }
+
+/* 已选基金信息条 */
+.fund-meta {
+  display: none;
+  align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 13px; padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(79,140,255,.24);
+  border-radius: var(--radius-sm);
+}
+.fund-meta.show { display: flex; }
+.fund-meta-name { font-weight: 650; font-size: 14.5px; }
+.fund-meta-code { color: var(--accent); font-size: 13px; font-variant-numeric: tabular-nums; }
+.fund-meta-spacer { flex: 1 1 auto; }
+
+/* 我的基金：表格 */
+.funds td { vertical-align: middle; }
+.funds .f-name { font-weight: 600; font-size: 14px; cursor: pointer; }
+.funds .f-name:hover { color: var(--accent); }
+.funds .f-code { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; margin-left: 6px; font-weight: 400; }
+.funds tr.current { background: rgba(79,140,255,.06); }
+.funds tr.current .f-name { color: var(--accent); }
+.funds tr.pinned { box-shadow: inset 3px 0 0 var(--warn); }
+.drag-col { padding-right: 0 !important; }
+.drag-handle {
+  display: inline-flex; cursor: grab; color: var(--text-faint);
+  padding: 4px 2px; border-radius: 5px;
+}
+.drag-handle:hover { color: var(--text); background: var(--card-hover); }
+.drag-handle:active { cursor: grabbing; }
+tr.dragging { opacity: .4; }
+tr.drop-target { box-shadow: inset 0 2px 0 var(--accent); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+.sort-arrow { font-size: 10px; margin-left: 3px; color: var(--accent); }
+.pin-star { color: var(--warn); }
+.fund-updating { opacity: .5; pointer-events: none; }
+
+/* 批量管理 */
+.batch-bar {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 13px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+.batch-select { width: auto; min-width: 170px; height: 34px; font-size: 13.5px; padding: 0 10px; }
+.batch-count { font-size: 13px; color: var(--text-dim); }
+.batch-count b { color: var(--accent); }
+.batch-spacer { flex: 1 1 auto; }
+#batchBody td:first-child, #batchTable th:first-child { text-align: center; }
+#batchBody input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+#batchCheckAll { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+
+/* 类型切换 / 记录类型徽章 / 批量新增 */
+.seg {
+  display: inline-flex; align-items: stretch;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 3px; height: 42px;
+}
+.seg-btn {
+  padding: 0 14px; background: transparent; color: var(--text-dim);
+  font-size: 14px; border-radius: 6px; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active { background: var(--accent); color: #fff; }
+.seg-btn[data-type="sell"].active { background: #e8862e; }
+.badge-buy { background: rgba(79,140,255,.16); color: #8fb8ff; }
+.badge-sell { background: rgba(255,159,67,.16); color: #ff9f43; }
+.bulk-input { width: auto; min-width: 140px; height: 34px; font-size: 13.5px; padding: 0 10px; }
+.batch-hint { font-size: 12.5px; color: var(--text-faint); margin-bottom: 10px; }
+.fund-checks { display: flex; flex-wrap: wrap; gap: 9px; }
+.check-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 12px; background: var(--bg-soft);
+  border: 1px solid var(--border); border-radius: 9px;
+  cursor: pointer; font-size: 13.5px;
+}
+.check-chip:hover { border-color: #35405a; }
+.check-chip input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.check-chip em { font-style: normal; color: var(--text-faint); font-size: 12px; }
+
+/* ================================================================
+   数据卡片行
+   ================================================================ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stat {
+  background: var(--card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 15px 16px;
+}
+.stat-label { font-size: 12.5px; color: var(--text-faint); margin-bottom: 6px; }
+.stat-value {
+  font-size: 23px; font-weight: 700; letter-spacing: -.3px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.sm { font-size: 17px; }
+.stat-note { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+
+.val-up { color: var(--up); }
+.val-down { color: var(--down); }
+.val-flat { color: var(--text-dim); }
+
+/* ================================================================
+   图表
+   ================================================================ */
+.chart-wrap { position: relative; width: 100%; }
+.chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.chart-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.range-group {
+  display: inline-flex; background: var(--bg-soft);
+  border: 1px solid var(--border); border-radius: 9px; padding: 3px;
+}
+.range-btn {
+  height: 28px; padding: 0 12px;
+  background: transparent; color: var(--text-dim);
+  font-size: 13px; border-radius: 6px;
+  transition: background .16s, color .16s;
+}
+.range-btn:hover { color: var(--text); }
+.range-btn.active { background: var(--accent); color: #fff; }
+
+.legend {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 12px; font-size: 12.5px; color: var(--text-dim);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-line { width: 18px; height: 0; border-top: 2px solid var(--accent); }
+.legend-line.dashed { border-top: 2px dashed #8d95a8; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--up); }
+
+/* 图例小徽章：涨跌配色 */
+.badge {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 0 7px;
+  border-radius: 5px;
+  font-size: 11.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.badge-up { background: rgba(255,91,91,.16); color: var(--up); }
+.badge-down { background: rgba(38,194,129,.16); color: var(--down); }
+.badge-flat { background: rgba(141,149,168,.16); color: var(--text-dim); }
+.badge-base { background: rgba(141,149,168,.14); color: var(--text-faint); }
+
+/* ================================================================
+   买入记录表 / 列表
+   ================================================================ */
+.table-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+table.rec {
+  width: 100%; border-collapse: collapse;
+  font-size: 14px;
+}
+table.rec th {
+  text-align: left; font-weight: 500;
+  font-size: 12.5px; color: var(--text-faint);
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+table.rec td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.rec tr:last-child td { border-bottom: none; }
+table.rec tbody tr:hover { background: rgba(255,255,255,.022); }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+th.num { text-align: right; }
+.rec-date { font-variant-numeric: tabular-nums; }
+.rec-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* 新增记录表单 */
+.form-row {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+  margin-bottom: 15px;
+}
+.field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 150px; min-width: 0; }
+.field label { font-size: 12.5px; color: var(--text-faint); }
+.field-narrow { flex: 0 1 150px; }
+
+.empty {
+  padding: 30px 16px; text-align: center;
+  color: var(--text-faint); font-size: 13.5px;
+}
+.empty-icon { opacity: .35; margin-bottom: 10px; }
+
+/* 提示条 */
+.tip {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px; line-height: 1.5;
+  margin-bottom: 14px;
+}
+.tip svg { flex: 0 0 auto; margin-top: 1px; }
+.tip-info { background: var(--accent-soft); border: 1px solid rgba(79,140,255,.22); color: #b9cdf5; }
+.tip-warn { background: rgba(255,176,32,.1); border: 1px solid rgba(255,176,32,.25); color: #f0cd8a; }
+.tip-danger { background: rgba(255,91,91,.1); border: 1px solid rgba(255,91,91,.26); color: #f5a8a8; }
+
+/* Toast */
+.toast-layer {
+  position: fixed; left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.toast {
+  background: #262c3d;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  animation: toastIn .22s ease;
+  max-width: 86vw; text-align: center;
+}
+.toast.ok { border-color: rgba(38,194,129,.4); }
+.toast.err { border-color: rgba(255,91,91,.45); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* 模态框 */
+.modal-layer {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(6,8,12,.72);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-layer.show { display: flex; }
+.modal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 100%; max-width: 430px;
+  padding: 20px;
+  animation: modalIn .2s ease;
+}
+@keyframes modalIn { from { opacity: 0; transform: translateY(-12px) scale(.98); } to { opacity: 1; transform: none; } }
+.modal-title { font-size: 16px; font-weight: 650; margin-bottom: 9px; }
+.modal-text { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; margin-bottom: 18px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* 详情浮层 */
+.popup {
+  position: fixed; z-index: 500;
+  background: #1e2330;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  font-size: 12.5px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  display: none;
+  line-height: 1.7;
+  min-width: 150px;
+}
+.popup.show { display: block; }
+.popup-row { display: flex; justify-content: space-between; gap: 14px; }
+.popup-key { color: var(--text-faint); }
+.popup-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.spinner {
+  width: 15px; height: 15px;
+  border: 2px solid rgba(255,255,255,.22);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.hidden { display: none !important; }
+
+/* ================================================================
+   响应式
+   ================================================================ */
+@media (max-width: 760px) {
+  .app { padding: 14px 13px calc(40px + env(safe-area-inset-bottom)); }
+  .brand-sub { display: none; }
+  .card { padding: 15px; border-radius: 12px; }
+  .table-wrap { margin: 0 -15px; padding: 0 15px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { padding: 13px; }
+  .stat-value { font-size: 20px; }
+  .btn { height: 42px; }
+  .btn-sm { height: 34px; }
+
+  /* 表格 → 卡片列表 */
+  table.rec thead { display: none; }
+  table.rec, table.rec tbody, table.rec tr, table.rec td { display: block; width: 100%; }
+  table.rec tr {
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 12px 13px;
+    margin-bottom: 10px;
+  }
+  table.rec td {
+    border: none; padding: 3px 0; white-space: normal;
+    display: flex; justify-content: space-between; gap: 12px;
+    text-align: right;
+  }
+  table.rec td::before {
+    content: attr(data-label);
+    color: var(--text-faint); font-size: 12.5px;
+    flex: 0 0 auto; text-align: left;
+  }
+  table.rec td.num { text-align: right; }
+  .rec-actions { justify-content: flex-end; margin-top: 6px; }
+  .drag-col, .drag-handle { display: none; }
+  #fundSortHint { display: none; }
+  .batch-bar { align-items: stretch; flex-direction: column; }
+  .batch-select { width: 100%; }
+  .batch-spacer { display: none; }
+}
+</style>
+<style id="__dm_no_drag_style__">* { -webkit-user-drag: none !important; }</style><style id="__dm_bindable_badge_style__">[data-sp-bindable="database"]{outline:1px dashed #0088ff;outline-offset:2px;border-radius:4px;}[data-sp-bindable="database"] *{pointer-events:none !important;transition:none !important;animation:none !important;}[data-sp-bindable="database"]{transition:none !important;animation:none !important;}</style></head>
+<body data-page-node-id="qRUJOX0CociGLE8LETQaAD" style="">
+<div class="app" data-page-node-id="iWsGs7pMyTA6sSRVF6Tn1f">
+
+  <!-- ============ 顶栏 ============ -->
+  <div class="topbar" data-page-node-id="nt7HemOuiwNDZHtAoj0ZWI">
+    <div class="brand" data-page-node-id="rfweDnIhDkFPHdYxtKhN5V">
+      <div class="brand-mark" data-page-node-id="5uCiAmuc0OiHEaDNrXQvfX">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="MDZSA8JhulIGv1fYag8X9x">
+          <polyline points="3 17 9 11 13 15 21 7" data-page-node-id="wpT4blMIVmgOARAd9VPyux"></polyline>
+          <polyline points="15 7 21 7 21 13" data-page-node-id="X3JgthvlGYA7Q4Ylib9OJ5"></polyline>
+        </svg>
+      </div>
+      <div data-page-node-id="sz0AyN2rne26NMkQWH0BJo">
+        <div class="brand-title" data-page-node-id="ZEWWRFWHobLXn7vRSxZ489" style="font-size: 18px;">基金买入工作台</div>
+        <div class="brand-sub" data-page-node-id="wZOc6FOn4Cf6rBb9CsWHcL">记录买入点 · 看清每次加仓的相对涨跌</div>
+      </div>
+    </div>
+    <div class="topbar-right" data-page-node-id="sncQcXcQMYMlaTiIB4xiAq">
+      <span class="sync-badge" id="syncBadge" data-state="local" data-page-node-id="iUms2697NK5PhAAX4lxmSC">
+        <span class="sync-dot" data-page-node-id="yJtGvUzhVCfu7MnMWj0w0T"></span><span id="syncText" data-page-node-id="FeQGYWR4JeWGHR189Ui4WG">本地模式</span>
+      </span>
+      <button class="btn btn-sm btn-ghost" id="btnImport" title="从 JSON 文件恢复数据" data-page-node-id="4FPYY5QHJw7WGJptoUMiEh">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="3s1z6wTtB9vgn3ZxOmdoWf">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="yvl2GNzGpZivX3u5TiB6uq"></path>
+          <polyline points="7 10 12 15 17 10" data-page-node-id="jj5fZLC2deU4qoJkVPwK93"></polyline><line x1="12" y1="15" x2="12" y2="3" data-page-node-id="6S6AcGkYZ8ZPHIw3VfVBMr"></line>
+        </svg>
+        导入
+      </button>
+      <button class="btn btn-sm btn-ghost" id="btnExport" title="导出 JSON 备份" data-page-node-id="K9AjF2kPLXBFIR6H0rtnIO">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="a4ZIvMmfCbUuCRzlMC3Qv5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="9bxtcNSAdhZfaFRwiJf5kE"></path>
+          <polyline points="17 8 12 3 7 8" data-page-node-id="EZHv4iOqRmghNAZZ9hIPT1"></polyline><line x1="12" y1="3" x2="12" y2="15" data-page-node-id="ZLnMo4iLhPp06u7z2v8VXQ"></line>
+        </svg>
+        备份
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ 今天要处理 ============ -->
+  <div id="todayZone" data-page-node-id="fUqW16oPgyxh8HBsQFTxlO"><div style="margin-bottom:16px"><div class="tip tip-info"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#26c281" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="8.5 12.5 11 15 15.5 9.5"></polyline></svg><span style="flex:1 1 auto">一切正常，没有需要处理的异常</span></div></div></div>
+
+  <!-- ============ 我的基金（表格：切换/置顶/排序/删除） ============ -->
+  <div class="card" id="fundListCard" data-page-node-id="kBYO4HV9Om13WLpeLsPF7i">
+    <div class="card-head" data-page-node-id="BMFR0N3DopTpNS71AjCPSf">
+      <div class="card-title" data-page-node-id="lrWjOXSCAAnmglK4LzCIGx">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="U95u0rCwHzOSG90UfAgqat">
+          <rect x="3" y="7" width="18" height="13" rx="2" data-page-node-id="xAzSZ72O17e8PPKHEqzUVy"></rect>
+          <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" data-page-node-id="dfGscSUP4SJgVEdN1M9I6Q"></path>
+        </svg>
+        我的基金
+        <span style="font-size:13px;font-weight:400;color:var(--text-faint)" id="fundListCount" data-page-node-id="aw5zrWjDG4mVVIXDB5BhzS">共 1 只</span>
+      </div>
+      <span style="font-size:12.5px;color:var(--text-faint)" id="fundSortHint" data-page-node-id="qSnC5AdLPbCxEhKn6gHsus">拖拽 ⋮ 调整顺序 · 点击表头按数值排序</span>
+    </div>
+    <div class="table-wrap" data-page-node-id="x8F6ERl0lOI7WlgLkpIdhe">
+      <table class="rec funds" id="fundTable" data-page-node-id="SH6852nBGBGjrd1HLMNAiL">
+        <thead data-page-node-id="1gJmqqHlwTScpJePsdy8gb">
+          <tr data-page-node-id="DJnNoNgZKxUFpQgqsr7WyR">
+            <th class="drag-col" style="width:34px" data-page-node-id="xwERQE0pzLkiP0EXKKLiEe"></th>
+            <th data-page-node-id="ZPxt3XfLqpUnoI0qJJz3s2">基金</th>
+            <th class="num" style="width: 64px; text-align: center;" data-page-node-id="49QgngGVjAOPNTsOJ91BoQ">笔数</th>
+            <th class="num sortable" data-sort="profit" style="width: 110px; text-align: center;" data-page-node-id="fqih3CqaaaLx9Tus9BWTHb">浮动盈亏<span class="sort-arrow" data-arrow="profit" data-page-node-id="xy7k7yfZSfXL7AEYciug1n"></span></th>
+            <th class="num sortable" data-sort="dd" style="width: 130px; text-align: center;" data-page-node-id="UKz6unc3xu8gLhynHosCjy">成立以来最大回撤<span class="sort-arrow" data-arrow="dd" data-page-node-id="1nlRMTLNBYQ7balZvcUpnS"></span></th>
+            <th class="num" style="width: 150px; text-align: center;" data-page-node-id="4pJI2DF0sFS5rBEuV2rQg1">操作</th>
+          </tr>
+        </thead>
+        <tbody id="fundBody" data-page-node-id="oRyMBXtIrQF3POhgmSNd4T"><tr data-code="110022" class="current " draggable="true"><td class="drag-col" data-label=""><span class="drag-handle" title="拖拽排序"><svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3" cy="2" r="1.4"></circle><circle cx="9" cy="2" r="1.4"></circle><circle cx="3" cy="7" r="1.4"></circle><circle cx="9" cy="7" r="1.4"></circle><circle cx="3" cy="12" r="1.4"></circle><circle cx="9" cy="12" r="1.4"></circle></svg></span></td><td data-label="基金"><span class="f-name" data-act="switch" title="切换到该基金">易方达消费行业股票</span><span class="f-code">110022</span></td><td data-label="笔数" class="num">4</td><td data-label="浮动盈亏" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="最大回撤" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="pin" title="置顶"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"></path></svg></button><button class="btn btn-sm btn-ghost" data-act="update" title="刷新净值（并升级为成立以来全部历史）">更新</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" title="删除该基金及其全部记录">删</button></div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="empty hidden" id="fundEmpty" data-page-node-id="URxIDPq7SnpkKd39Ud8CB3">
+      <div class="empty-icon" data-page-node-id="MF0CdVgNlesznIAaNP3biC">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="1l7AvyIPhTyudIcw8w5YF0">
+          <rect x="3" y="7" width="18" height="13" rx="2" data-page-node-id="NWth7vFpedTi8TP07p6EJ8"></rect>
+          <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" data-page-node-id="Z3Bg84Hi6YK7qxR4WQyQNd"></path>
+        </svg>
+      </div>
+      还没有基金，在下方「选择基金」输入代码添加
+    </div>
+  </div>
+
+  <!-- ============ 选择基金 ============ -->
+  <div class="card" data-page-node-id="0T6PlUEb1zYJqdy6OyQnYk">
+    <div class="card-head" data-page-node-id="CNpndtcifdwT8JycwPjGJJ">
+      <div class="card-title" data-page-node-id="VOdIzZCrxAJSaHUVqVBUkP">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="m51u8vQq3fSK7tf5CzhIoU">
+          <circle cx="11" cy="11" r="7" data-page-node-id="FtgXEf3tOJitvJJzcmh6nl"></circle><line x1="16.5" y1="16.5" x2="21" y2="21" data-page-node-id="IC0Ku2NpCaDgcWrP7aPkHn"></line>
+        </svg>
+        选择基金
+      </div>
+    </div>
+
+    <div class="picker-row" data-page-node-id="PkxfXoMoOd9deUFlNjISga">
+      <div class="picker-input-wrap" data-page-node-id="dmeu5mtyysETFUK5WF3Y73">
+        <input type="text" class="field-input" id="fundInput" autocomplete="off" placeholder="输入 6 位基金代码，如 110022" inputmode="numeric" data-page-node-id="FEiRz8k7VHOCn2EUO95dHj">
+        <div class="suggest" id="fundSuggest" data-page-node-id="98HaM9B8rYEGx9G2ZFgLk2"></div>
+      </div>
+      <button class="btn btn-primary" id="btnLoadFund" data-page-node-id="sRIzA4QRqlKpXD6gBILYAb"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><polyline points="21 4 21 9 16 9"></polyline></svg> 加载净值</button>
+    </div>
+  </div>
+
+  <!-- ============ 净值走势 ============ -->
+  <div class="card" data-page-node-id="chp6U4ED2aGHvlqCWitd8M">
+    <div class="card-head" data-page-node-id="9URMa8rmg9ovHvkt3DdfPr">
+      <div class="card-title" data-page-node-id="0AdYwluMvuevkYs5g7P40G">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="yFd6YMqnaHp1YEJj9Q974l">
+          <polyline points="3 16 8 11 12 14 21 6" data-page-node-id="Sjhmg3jhlyk27bw7HHn8Xb"></polyline>
+        </svg>
+        净值走势
+      </div>
+      <div class="chart-toolbar" data-page-node-id="pskGmGHHeXDf6H7k22xZJv">
+        <div class="range-group" id="rangeGroup" data-page-node-id="Pa8nXQS2YDg9555Db0woTb">
+          <button class="range-btn" data-range="30" data-page-node-id="GPIFUktmTpf6557FOSxMAB">近1月</button>
+          <button class="range-btn" data-range="90" data-page-node-id="I4UdhTDODoh70pkvoDQP43">近3月</button>
+          <button class="range-btn" data-range="180" data-page-node-id="HPKdQ6A4NeIKvYzYKL67ys">近6月</button>
+          <button class="range-btn" data-range="365" data-page-node-id="xkHrCw8tkDI0OYkUIzqlK4">近1年</button>
+          <button class="range-btn" data-range="1095" data-page-node-id="ewDx2cDImmHwndevrJpyk5">近3年</button>
+          <button class="range-btn" data-range="1825" data-page-node-id="cpjDbDpvC4fh6cpVneR4Qd">近5年</button>
+          <button class="range-btn" data-range="3650" data-page-node-id="HTdrrHe88VYYdBSNqYA2ZB">近10年</button>
+          <button class="range-btn active" data-range="all" data-page-node-id="DvmiuTDBLaY8jeDmN7mVdx">全部</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="fund-meta show" id="fundMeta" data-page-node-id="5Y5IzsULPiemFIM8EYU1gz">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kHDaw1JJD1uebPCqwa1ldw">
+        <circle cx="12" cy="12" r="9" data-page-node-id="6jU51rBV9AXYX0kylHQDAl"></circle><line x1="12" y1="11" x2="12" y2="16" data-page-node-id="7BaPv3BWvzCRzTM0TQtjoe"></line><line x1="12" y1="8" x2="12" y2="8" data-page-node-id="hBG8adKwqpdBhHKCKBklV3"></line>
+      </svg>
+      <span class="fund-meta-name" id="metaName" data-page-node-id="4pcCMBgeteb28qBEpSZbMr">易方达消费行业股票</span>
+      <span class="fund-meta-code" id="metaCode" data-page-node-id="9m8jiQXre6jMHQxqmwuoe5">110022</span>
+      <span class="fund-meta-spacer" data-page-node-id="yJeSzZJJ9a28sdjHtkxvSt"></span>
+      <span style="font-size:12.5px;color:var(--text-faint)" id="metaUpdated" data-page-node-id="BXetoaiLrhJMgRlwBpiZ1P">无净值数据</span>
+    </div>
+
+    <div class="chart-wrap" id="chartWrap" data-page-node-id="QIH4Wf96S2HCzkGMIcZigq">
+      <div class="empty" id="chartEmpty" data-page-node-id="SHboBS3eFdQRBGfDNRCqZT">
+        <div class="empty-icon" data-page-node-id="Rkp76mUD9kdaPmjUZjfnOZ">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="jHiWtIEaT5MXEEmAw0hmiu">
+            <polyline points="3 16 8 11 12 14 21 6" data-page-node-id="21CEwBjIdpLHZn3fc0uYzo"></polyline>
+          </svg>
+        </div>
+        请先在上方选择基金并加载净值数据
+      </div>
+      <svg class="chart-svg hidden" id="chartSvg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" data-page-node-id="lWgcASCcqbIl3sMPXtYzoY"></svg>
+    </div>
+
+    <div class="legend" id="chartLegend" data-page-node-id="E6RzVydCEeiEVEncIZ6dQM"></div>
+  </div>
+
+  <!-- ============ 数据概览 ============ -->
+  <div class="stat-grid" id="statGrid" data-page-node-id="kR0cJSJIOXSr0yZzaqYXyf"><div class="stat"><div class="stat-label">操作笔数</div><div class="stat-value sm">4 笔</div><div class="stat-note">买 4 · 卖 0</div></div><div class="stat"><div class="stat-label">投入本金</div><div class="stat-value sm">¥4,000.00</div></div><div class="stat"><div class="stat-label">浮动盈亏</div><div class="stat-value sm"><span class="val-flat">—</span></div><div class="stat-note">需加载净值数据</div></div></div>
+
+  <!-- ============ 买卖记录 ============ -->
+  <div class="card" data-page-node-id="CVkKPQAW6HfgZg9CT7o1jn">
+    <div class="card-head" data-page-node-id="gPZxqg7kxg3Lxc0qHAWHMH">
+      <div class="card-title" data-page-node-id="fQSEyR5eDnSfITUwBs3mVm">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="zFetJqn6LJtPuED9VsTiJ8">
+          <path d="M9 11H3v10h6zM21 3h-6v18h6zM15 7H9v14h6z" data-page-node-id="tiCJH1K0lsGZ9Z9kN7FQA8"></path>
+        </svg>
+        买卖记录
+        <span style="font-size:13px;font-weight:400;color:var(--text-faint)" id="recCount" data-page-node-id="GOtmrNc1KKfyWLEYQQ1bBQ">4 笔</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap" data-page-node-id="7GNldfN894SR7UEMNUDewI-group">
+        <button class="btn btn-sm" id="btnBulkMode" title="一次为多只基金添加相同的买入/卖出记录" data-page-node-id="7GNldfN894SR7UEMNUDewI">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="J84mNpIuqEidYmhxLw8joc">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" data-page-node-id="mJ5BZZMrwJrSdNF0KhJxSV"></path><path d="M2 17l10 5 10-5" data-page-node-id="c7JiH7h1pRRwfbp1jEJmgN"></path><path d="M2 12l10 5 10-5" data-page-node-id="PYXOWaILMx9a2aProyg9JH"></path>
+          </svg>
+          <span id="bulkModeLabel" data-page-node-id="DsqAJsHQD1onuKBt6Jfp1R">批量新增</span>
+        </button>
+        <button class="btn btn-sm" id="btnBatchMode" title="跨基金批量选择、修改或删除记录" data-page-node-id="YU45DWuOW0uQR1vZF7EWSS">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="d44xz31Ze5A6gvVpmLsHue">
+            <polyline points="9 11 12 14 22 4" data-page-node-id="Pw5PtKmIcRWbGljzitvSvZ"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" data-page-node-id="WJzlbmQ7xVjqQWD3DhlVKC"></path>
+          </svg>
+          <span id="batchModeLabel" data-page-node-id="b91DHMXUP0HvLF23RriQt4">批量管理</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="form-row" id="recFormRow" data-page-node-id="xD78MdUhHxCkfXxdOj25oO">
+      <div class="field field-narrow" data-page-node-id="9mbeWc27Gr6SrLXbSbtOQq">
+        <label data-page-node-id="eHHXQZA24dCHxbC7x6Rzfn">类型</label>
+        <div class="seg" id="recTypeSeg" data-page-node-id="YM83k1JhDJTCHdo7OWWoew">
+          <button type="button" class="seg-btn active" data-type="buy" data-page-node-id="lpQuDAfqFr48t96Hlkvg6G">买入</button>
+          <button type="button" class="seg-btn" data-type="sell" data-page-node-id="i6s23xDT0HYsP1lEwbCsH6">卖出</button>
+        </div>
+      </div>
+      <div class="field field-narrow" data-page-node-id="6CqQmVXU7DDyDqHxTbBHYu">
+        <label for="recDate" data-page-node-id="jofVYPVzvT62kOnHo2Oczu">日期</label>
+        <input type="date" class="field-input" id="recDate" data-page-node-id="VxvJIVFKdrNObjY6IRzqdL">
+      </div>
+      <div class="field field-narrow" data-page-node-id="LPYVvKms8L8f4U0ef0INu4">
+        <label for="recAmount" id="recAmountLabel" data-page-node-id="GEj0NRZZrJIZMjf907H6Gy">买入金额（元）</label>
+        <input type="number" class="field-input" id="recAmount" placeholder="1000" min="0" step="100" inputmode="decimal" data-page-node-id="suCuwpZO7XgYD9yeeNoWsh">
+      </div>
+      <div class="field" data-page-node-id="Rtjzs5wHPEdHHSbe19xdO2">
+        <label for="recNote" data-page-node-id="Om7imVUJDRWZmwfWiZtkCx">备注（可选）</label>
+        <input type="text" class="field-input" id="recNote" placeholder="如：定投 / 补仓" maxlength="30" data-page-node-id="JRA007aA9FcteQFVXUsVNb">
+      </div>
+      <button class="btn btn-primary" id="btnAddRec" style="flex:0 0 auto" data-page-node-id="GkIyDdu8kYeedvdIMJUvV6">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" data-page-node-id="pEo7A37v751XTixWDOwFDW">          <line x1="12" y1="5" x2="12" y2="19" data-page-node-id="NRKX9ttEv38VwoCP8tTBRo"></line><line x1="5" y1="12" x2="19" y2="12" data-page-node-id="6lqLIUgpDV0beX7tC0rA4f"></line></svg>
+        添加
+      </button>
+    </div>
+
+    <div class="table-wrap" id="recTableWrap" data-page-node-id="aqYNX8tQJNtLAFC89owQRM">
+      <table class="rec" id="recTable" data-page-node-id="EdcxWG0eslbIPAK4WCXOdp">
+        <thead data-page-node-id="XXDO9FpqPziXANCnpTMl0X">
+          <tr data-page-node-id="Uz4I0bcOquNKyEupBCQ84l">
+            <th data-page-node-id="KJidYPX5tJ0xI8tCLGcLtN">日期</th>
+            <th style="width: 64px; text-align: center;" data-page-node-id="nG2lIr1GkdSIehQYfZAgol">类型</th>
+            <th class="num" data-page-node-id="QElh449MztrU4hGMcY91zw" style="text-align: center;">金额</th>
+            <th class="num" data-page-node-id="lV3YHyJyZC5bHU7tChGPCO" style="text-align: center;">当日净值</th>
+            <th class="num" data-page-node-id="lb65PhdyS3st1Dm2zOLI64" style="text-align: center;">份额</th>
+            <th data-page-node-id="NVulndfz2Vv4UVPcsbZgda" style="text-align: left;">备注</th>
+            <th class="num" data-page-node-id="XsS7k6bzeQ7Hl69ttecDzl" style="text-align: center;">较上次买入</th>
+            <th class="num" data-page-node-id="3SJLijBt8bCmk2rkVbybEw" style="text-align: center;">持有至最新</th>
+            <th class="num" data-page-node-id="35iNeWcBfAcpir5GAQgIpE" style="text-align: center;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="recBody" data-page-node-id="TSErQx131xntQ99sWauEzm"><tr><td data-label="日期" class="rec-date">2026-09-02</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">加仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws742km35h">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws742km35h">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-07-29</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,200.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74nknfv1">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74nknfv1">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-06-14</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥800.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">补仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74cb7l2a">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74cb7l2a">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-05-15</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">首次定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws744v5mi5">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws744v5mi5">删</button></div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="empty hidden" id="recEmpty" data-page-node-id="lcKxw6vwztSdN5F6dk7roA">
+      <div class="empty-icon" data-page-node-id="yyhoR7ge8GkBWELCG71fYl">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="WpTARgG7wev9IV3DzeSoel">
+          <rect x="3" y="4" width="18" height="17" rx="2" data-page-node-id="BsCW9HDmLzGS4btO57ozj5"></rect><line x1="3" y1="10" x2="21" y2="10" data-page-node-id="lo3Yy1GsOyqdn1gjf4CkG9"></line>
+        </svg>
+      </div>
+      还没有买卖记录，在上方添加第一笔
+    </div>
+
+    <!-- 批量管理面板 -->
+    <div id="batchPane" class="hidden" data-page-node-id="TyXV7OthnuoEKaBkiqne7k">
+      <div class="batch-bar" data-page-node-id="JzCpsHMWvHVXl71GjpKUVE">
+        <select class="field-input batch-select" id="batchFilter" title="按基金筛选" data-page-node-id="pukJxvikU8rRh69A1kzZC0"></select>
+        <button class="btn btn-sm btn-ghost" id="btnBatchAll" data-page-node-id="db8jL5HlM3tKBTfMxaMzKt">全选</button>
+        <button class="btn btn-sm btn-ghost" id="btnBatchNone" data-page-node-id="rDWIUpJwb1pCdIv34hbvGP">清除</button>
+        <span class="batch-count" data-page-node-id="CsVEe6QJfHkthisoNaLxBv">已选 <b id="batchCount" data-page-node-id="9YNV9CQIn7FF4OGp9Dp5p6">0</b> 条</span>
+        <span class="batch-spacer" data-page-node-id="jYOXnoQJcAHnM4eMlqrcXe"></span>
+        <button class="btn btn-sm" id="btnBatchDate" disabled="" data-page-node-id="4kD133ceeYhYyG7vgRWFrD">改日期</button>
+        <button class="btn btn-sm" id="btnBatchAmount" disabled="" data-page-node-id="wEmRGzELWliqSkbBebKVER">改金额</button>
+        <button class="btn btn-sm" id="btnBatchNote" disabled="" data-page-node-id="LZ36PyFDXC2w7kmctxUocE">改备注</button>
+        <button class="btn btn-sm btn-danger" id="btnBatchDel" disabled="" data-page-node-id="jAg00DrqN7U1Ust8XDkEDV">批量删除</button>
+      </div>
+      <div class="table-wrap" data-page-node-id="6uCLzMH0Cz4qUCzzp031Ni">
+        <table class="rec" id="batchTable" data-page-node-id="YKq7s0HnDSwKiGeJWgCCdE">
+          <thead data-page-node-id="UdkcqwC8Dhj5btN5zbSqQq">
+          <tr data-page-node-id="mkynXEB1p17YJZMrCN4HVj">
+            <th style="width:36px" data-page-node-id="SZ8T0H5PCpmYtmM37KsL79"><input type="checkbox" id="batchCheckAll" title="全选/反选" data-page-node-id="IyQ5gsqTOkH6ZK1IHpZX6p"></th>
+            <th data-page-node-id="6p06nXtjuIFUW6TcCRbSEd">基金</th>
+            <th style="width:64px" data-page-node-id="1dOHCWUTVSlGrwSXpfgzyA">类型</th>
+            <th data-page-node-id="JXD86jBYBBwqjMTp767HFC">日期</th>
+            <th class="num" data-page-node-id="SvjlAVvNGHfEsPFOueR3hs">金额</th>
+            <th data-page-node-id="BCf5QzASgr0AaBxDWYAySr">备注</th>
+          </tr>
+          </thead>
+          <tbody id="batchBody" data-page-node-id="VJJEg7u84tuNDi2w9mq58g"></tbody>
+        </table>
+      </div>
+      <div class="empty hidden" id="batchEmpty" data-page-node-id="Dz9amBsbdGwA0OGMd4tmfq">没有符合条件的记录</div>
+    </div>
+
+    <!-- 批量新增面板（多基金批量买入/卖出） -->
+    <div id="bulkPane" class="hidden" data-page-node-id="Z62XVA7FCqHEhr8EvUE3CV">
+      <div class="batch-bar" data-page-node-id="bgys5RVF2aBD60JpJXfPl3">
+        <div class="seg" id="bulkTypeSeg" data-page-node-id="YEp8qD7jJLcnWDgpdW4xzm">
+          <button type="button" class="seg-btn active" data-type="buy" data-page-node-id="vOprffE7msGX2fWSsJmm95">批量买入</button>
+          <button type="button" class="seg-btn" data-type="sell" data-page-node-id="PXMcFqHuEm5LtLMKA3kM3m">批量卖出</button>
+        </div>
+        <input type="date" class="field-input bulk-input" id="bulkDate" data-page-node-id="3VmLAMFVi2QnN2KbQpSXHL">
+        <input type="number" class="field-input bulk-input" id="bulkAmount" placeholder="每只金额（元）" min="0" step="100" inputmode="decimal" data-page-node-id="3pkEZ8tWJTT4GZGZjhSPtW">
+        <input type="text" class="field-input bulk-input" id="bulkNote" placeholder="备注（可选）" maxlength="30" data-page-node-id="zakW8P2HV6cUbJvFkHuPgr">
+        <span class="batch-spacer" data-page-node-id="FBu3ud5EXeBzo8NX6ldXqN"></span>
+        <button class="btn btn-sm btn-primary" id="btnBulkSubmit" data-page-node-id="qlAAygLG6mQLmP6u9oK7Xo">添加到所选基金</button>
+        <button class="btn btn-sm btn-ghost" id="btnBulkExit" data-page-node-id="qC6oP0cQxccFKNwxJsGKi0">收起</button>
+      </div>
+      <div class="batch-hint" data-page-node-id="IsnKELiGOwJcA90hbkpy99">勾选要操作的基金（已选 <b id="bulkCount" data-page-node-id="3o19snbNye2JKqJVfz0PkE">0</b> 只），将按上方日期与金额逐只添加记录</div>
+      <div class="fund-checks" id="bulkFundChecks" data-page-node-id="bpdgR6gm4gAayxvFLxIVeF"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast 容器 -->
+<div class="toast-layer" id="toastLayer" data-page-node-id="3kDc7DiHT2QEjdSD5rNYOM"></div>
+
+<!-- 详情浮层 -->
+<div class="popup" id="popup" data-page-node-id="YtFCSKoetcSCVji57QHSvo"></div>
+
+<!-- 确认模态框 -->
+<div class="modal-layer" id="modalLayer" data-page-node-id="k58itiCENfCTfFI686uv8I">
+  <div class="modal" data-page-node-id="VQqNdu0MuIokC58npeyEnG">
+    <div class="modal-title" id="modalTitle" data-page-node-id="ONbE86cIHZRIVTIigxlg2k">确认操作</div>
+    <div class="modal-text" id="modalText" data-page-node-id="WvcL7HdEgzy5cf1dKiDZYO">—</div>
+    <div class="modal-actions" data-page-node-id="SGV7WUDuqLbM6AEzrzFBQT">
+      <button class="btn btn-ghost" id="modalCancel" data-page-node-id="jn7q24wVHYG7TyQ2fGrG9c">取消</button>
+      <button class="btn btn-primary" id="modalConfirm" data-page-node-id="0XKsQsCI16z6EWJwfvq3uo">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 隐藏的导入文件选择器 -->
+<input type="file" id="importFile" accept=".json,application/json" class="hidden" data-page-node-id="cm6m6aLUpUhtzfdLi52QAy">
+
+<script>
+/* ==================================================================
+   基金买入工作台 — 前端逻辑
+   架构分层（严格单向，禁止渲染函数互调，见铁律 9）：
+     数据层  Store  : 读写本地文件 / localStorage
+     计算层  Calc   : 纯函数，净值匹配、涨跌幅计算、聚合
+     渲染层  Render : 只读 state 更新 DOM，互不调用
+     调度层  refreshAll() : 唯一刷新入口
+   ================================================================== */
+(function () {
+'use strict';
+
+/* ================================================================
+   一、常量与工具
+   ================================================================ */
+var CFG = {
+  STORE_VERSION: 1,
+  LS_KEY: 'wb_fund_workbench_v1',
+  API_TIMEOUT: 20000,
+  // 净值为 0 / 缺失时的兜底
+  MAX_SYNC_LOG: 50
+};
+
+var MS_DAY = 24 * 3600 * 1000;
+
+function $(id) { return document.getElementById(id); }
+
+function el(tag, cls, html) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+}
+
+/** 本地时区下的 YYYY-MM-DD */
+function toDateStr(ts) {
+  var d = new Date(ts);
+  var m = d.getMonth() + 1, day = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
+}
+
+/** YYYY-MM-DD → 当天 00:00 时间戳（本地时区） */
+function dateStrToTs(s) {
+  if (!s) return NaN;
+  var p = String(s).split('-');
+  if (p.length !== 3) return NaN;
+  var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+  var t = d.getTime();
+  return isNaN(t) ? NaN : t;
+}
+
+function todayStr() { return toDateStr(Date.now()); }
+
+/** 数字格式化：保留 n 位小数 */
+function fmt(n, digits) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toFixed(digits == null ? 2 : digits);
+}
+
+/** 百分比格式化，带正负号（超大值转为倍数显示，避免撑破布局） */
+function fmtPct(n, digits) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  var d = digits == null ? 2 : digits;
+  var v = Number(n);
+  if (!isFinite(v)) return '—';
+  // 超过 ±9999% 时改用倍数表达（如 +100.0倍），并压缩到 4 位有效数字
+  var abs = Math.abs(v);
+  if (abs >= 9999) {
+    var times = v / 100;
+    var tStr = Math.abs(times) >= 1000
+      ? (times > 0 ? '+' : '') + times.toFixed(0) + '倍'
+      : (times > 0 ? '+' : '') + times.toFixed(1) + '倍';
+    return tStr;
+  }
+  return (v > 0 ? '+' : '') + v.toFixed(d) + '%';
+}
+
+/** 金额格式化：千分位（超大值自动压缩位数） */
+function fmtMoney(n, digits) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  var v = Number(n);
+  if (!isFinite(v)) return '—';
+  // 超过 1 亿时用「亿」表达，避免撑破卡片
+  if (Math.abs(v) >= 1e8) {
+    return (v / 1e8).toFixed(2) + '亿';
+  }
+  var d = digits == null ? 2 : digits;
+  var fixed = v.toFixed(d);
+  var parts = fixed.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+/** 涨跌配色 class（涨红跌绿） */
+function pctClass(n) {
+  if (n === null || n === undefined || isNaN(n) || Math.abs(n) < 1e-9) return 'val-flat';
+  return n > 0 ? 'val-up' : 'val-down';
+}
+function badgeClass(n) {
+  if (n === null || n === undefined || isNaN(n) || Math.abs(n) < 1e-9) return 'badge-flat';
+  return n > 0 ? 'badge-up' : 'badge-down';
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/><!--pnid:9LObR9vEGBvFA81ogzQCiM-->/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ================================================================
+   二、全局状态（唯一数据源，渲染层只读）
+   ================================================================ */
+var state = {
+  funds: {},          // { code: { code, name, points[], acPoints[], updatedAt, full, fetchedAt } }
+  records: [],        // [{ id, code, date, amount, note, createdAt }]
+  currentCode: '',    // 当前查看的基金
+  range: 'all',       // 图表区间
+  syncState: 'local', // synced | syncing | local | error
+  loading: false,
+  // 基金列表：手动顺序 / 置顶 / 表头排序（'' 表示拖拽手动模式）
+  fundOrder: [],
+  fundPinned: {},
+  fundSort: { key: '', dir: 'desc' },
+  // 记录录入类型（买入/卖出，会话级）
+  recType: 'buy',
+  // 批量管理（会话级，不持久化）
+  batch: { active: false, selected: {}, filterCode: '' },
+  // 批量新增：一次为多只基金添加相同记录（会话级）
+  bulk: { active: false, type: 'buy', selected: {} }
+};
+
+/* ================================================================
+   三、数据层：持久化
+   优先写本地文件（服务端），失败降级 localStorage
+   ================================================================ */
+var Store = (function () {
+
+  function serialize() {
+    return {
+      version: CFG.STORE_VERSION,
+      funds: state.funds,
+      records: state.records,
+      currentCode: state.currentCode,
+      fundOrder: state.fundOrder,
+      fundPinned: state.fundPinned,
+      fundSort: state.fundSort,
+      savedAt: Date.now()
+    };
+  }
+
+  function applyData(data) {
+    if (!data || typeof data !== 'object') return false;
+    if (data.funds && typeof data.funds === 'object') state.funds = data.funds;
+    if (Array.isArray(data.records)) {
+      state.records = data.records;
+      // 旧版本数据无 type 字段，统一归一为买入
+      for (var ri = 0; ri < state.records.length; ri++) {
+        if (state.records[ri].type !== 'sell') state.records[ri].type = 'buy';
+      }
+    }
+    if (typeof data.currentCode === 'string') state.currentCode = data.currentCode;
+    if (Array.isArray(data.fundOrder)) state.fundOrder = data.fundOrder;
+    if (data.fundPinned && typeof data.fundPinned === 'object') state.fundPinned = data.fundPinned;
+    if (data.fundSort && typeof data.fundSort === 'object') state.fundSort = data.fundSort;
+    return true;
+  }
+
+  /** 从服务端本地文件读取 */
+  function loadFromServer() {
+    return fetch('/api/store', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok && j.data) return applyData(j.data);
+        return false;
+      })
+      .catch(function () { return false; });
+  }
+
+  function loadFromLocal() {
+    try {
+      var raw = localStorage.getItem(CFG.LS_KEY);
+      if (!raw) return false;
+      return applyData(JSON.parse(raw));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function saveToLocal() {
+    try {
+      localStorage.setItem(CFG.LS_KEY, JSON.stringify(serialize()));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 保存：本地文件为主，localStorage 永远同步写一份做双保险 */
+  function save() {
+    saveToLocal();
+    setSync('syncing');
+    return fetch('/api/store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serialize())
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) { setSync('synced'); return true; }
+        setSync('error');
+        return false;
+      })
+      .catch(function () { setSync('error'); return false; });
+  }
+
+  /**
+   * 启动初始化：
+   *  1) 优先读服务端本地文件
+   *  2) 服务端已有数据 → 用之
+   *  3) 服务端为空但本地有 → 用本地并推送到服务端
+   *  4) 都没有 → 空数据（由 Seed 决定是否预置示例）
+   */
+  function init() {
+    var serverOk = false;
+    return loadFromServer()
+      .then(function (ok) {
+        serverOk = ok;
+        var hasServerData = ok && (state.records.length > 0 || Object.keys(state.funds).length > 0);
+        if (hasServerData) return true;
+        var hasLocal = loadFromLocal();
+        if (hasLocal) {
+          // 本地有数据、服务端没有 → 推送到服务端
+          return save();
+        }
+        return false;
+      })
+      .then(function () {
+        setSync(serverOk ? 'synced' : 'local');
+        return serverOk;
+      });
+  }
+
+  return { init: init, save: save, saveToLocal: saveToLocal, serialize: serialize, applyData: applyData };
+})();
+
+/* ================================================================
+   四、计算层：纯函数（无副作用、不碰 DOM）
+   ================================================================ */
+
+/** 二分查找：找出「日期 <= ts」的最后一个净值点 */
+function findNavOnOrBefore(points, ts) {
+  if (!points || !points.length) return null;
+  if (ts < points[0].ts) return null;
+  var lo = 0, hi = points.length - 1, ans = -1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    if (points[mid].ts <= ts) { ans = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  return ans < 0 ? null : points[ans];
+}
+
+/** 最新的净值点 */
+function latestPoint(points) {
+  if (!points || !points.length) return null;
+  return points[points.length - 1];
+}
+
+/**
+ * 核心：把某基金的买入记录（按日期升序）加工成带计算字段的数组
+ * 每条附加：
+ *   nav        当日（或之前最近交易日）单位净值
+ *   shares     份额 = 金额 / 净值
+ *   prevNav    上一次买入的净值
+ *   vsPrev     相对上一次买入的涨跌幅 %
+ *   vsLatest   相对最新净值的涨跌幅 %（持有至最新）
+ *   holding    持有市值（份额 × 最新净值）
+ */
+function enrichRecords(records, fund) {
+  var points = (fund && fund.points) || [];
+  var last = latestPoint(points);
+
+  var sorted = records.slice().sort(function (a, b) {
+    var ta = dateStrToTs(a.date), tb = dateStrToTs(b.date);
+    if (ta !== tb) return ta - tb;
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  });
+
+  var out = [];
+  var lastBuyNav = null;   // 上一「买入」的净值（卖出点也用它来比较）
+  var cumShares = 0;       // 累计持有份额（买入 +，卖出 −）
+
+  for (var i = 0; i < sorted.length; i++) {
+    var r = sorted[i];
+    var type = (r.type === 'sell') ? 'sell' : 'buy';
+    var ts = dateStrToTs(r.date);
+    var navPoint = isNaN(ts) ? null : findNavOnOrBefore(points, ts);
+    var nav = navPoint ? navPoint.nav : null;
+
+    var item = {
+      id: r.id,
+      code: r.code,
+      type: type,
+      date: r.date,
+      amount: Number(r.amount) || 0,
+      note: r.note || '',
+      createdAt: r.createdAt || 0,
+      nav: nav,
+      navDate: navPoint ? toDateStr(navPoint.ts) : null,
+      // 买入日当天净值可能比实际日期早（非交易日顺延），标记出来
+      navIsExact: navPoint ? toDateStr(navPoint.ts) === r.date : false,
+      shares: null,
+      vsPrev: null,        // 相对上一次「买入」的涨跌幅 %
+      vsLatest: null,      // 仅买入：相对最新净值的涨跌幅 %
+      remainingShares: null,
+      latestNav: last ? last.nav : null
+    };
+
+    if (nav && nav > 0) {
+      item.shares = item.amount / nav;
+      cumShares += (type === 'buy' ? item.shares : -item.shares);
+      item.remainingShares = cumShares;
+      if (type === 'buy' && last && last.nav > 0) {
+        item.vsLatest = ((last.nav - nav) / nav) * 100;
+      }
+    }
+
+    // 买入/卖出点都相对「上一次买入价」比较
+    if (lastBuyNav && nav && lastBuyNav > 0) {
+      item.vsPrev = ((nav - lastBuyNav) / lastBuyNav) * 100;
+    }
+    if (type === 'buy' && nav && nav > 0) {
+      lastBuyNav = nav;
+    }
+
+    out.push(item);
+  }
+
+  return out;
+}
+
+/** 汇总统计（份额法：剩余份额 × 最新净值 + 卖出回款 − 投入本金） */
+function summarize(enriched) {
+  var buyAmount = 0, sellAmount = 0, buyShares = 0, sellShares = 0;
+  var hasNav = false, winCount = 0, validVsPrev = 0;
+  var buyCount = 0, sellCount = 0;
+  var latestVsPrevBuy = null;
+  var latestNav = null;
+
+  for (var i = 0; i < enriched.length; i++) {
+    var it = enriched[i];
+    if (it.latestNav != null) latestNav = it.latestNav;
+    if (it.type === 'sell') {
+      sellCount++;
+      sellAmount += it.amount;
+      if (it.shares != null) sellShares += it.shares;
+    } else {
+      buyCount++;
+      buyAmount += it.amount;
+      if (it.shares != null) { buyShares += it.shares; hasNav = true; }
+      if (it.vsPrev != null) {
+        validVsPrev++;
+        if (it.vsPrev < 0) winCount++;  // 相对上次买在更低位 = 补到了更便宜的价
+      }
+    }
+  }
+
+  if (enriched.length) {
+    latestVsPrevBuy = enriched[enriched.length - 1].vsLatest;
+  }
+
+  var remainingShares = buyShares - sellShares;
+  var holding = hasNav && latestNav ? remainingShares * latestNav : null;
+  var profit = hasNav ? (holding + sellAmount - buyAmount) : null;
+  var profitRate = hasNav && buyAmount > 0 ? (profit / buyAmount) * 100 : null;
+  var avgCost = hasNav && buyShares > 0 ? buyAmount / buyShares : null;
+
+  return {
+    count: enriched.length,
+    buyCount: buyCount,
+    sellCount: sellCount,
+    totalAmount: buyAmount,
+    sellAmount: sellAmount,
+    totalShares: hasNav ? remainingShares : null,
+    totalHolding: holding,
+    profit: profit,
+    profitRate: profitRate,
+    avgCost: avgCost,
+    // 相对上一次买入在更低价位的次数（"抄底"次数）
+    cheaperCount: winCount,
+    validVsPrev: validVsPrev,
+    latestVsPrevBuy: latestVsPrevBuy
+  };
+}
+
+/** 简单移动平均线：ts -> 均值（不足 n 个点时为 null），基于完整历史保证窗口左端正确 */
+function computeMA(points, n) {
+  var map = {};
+  if (!points || !points.length) return map;
+  var win = [], sum = 0;
+  for (var i = 0; i < points.length; i++) {
+    win.push(points[i].nav);
+    sum += points[i].nav;
+    if (win.length > n) { sum -= win.shift(); }
+    map[points[i].ts] = (win.length >= n) ? (sum / n) : null;
+  }
+  return map;
+}
+
+/** 按区间裁剪净值点 */
+function sliceByRange(points, range) {
+  if (!points || !points.length) return [];
+  if (range === 'all') return points;
+  var days = parseInt(range, 10);
+  if (isNaN(days)) return points;
+  var cutoff = Date.now() - days * MS_DAY;
+  var out = points.filter(function (p) { return p.ts >= cutoff; });
+  return out.length >= 2 ? out : points.slice(-2);
+}
+
+/**
+ * 最大回撤：每个交易日相对「此前（含当日）最高净值」的回撤幅度
+ * 返回 { ts: 回撤百分比(≤0) } 映射；处于历史高点时为 0
+ */
+function computeDrawdownMap(points) {
+  var map = {};
+  if (!points || !points.length) return map;
+  var max = -Infinity;
+  for (var i = 0; i < points.length; i++) {
+    var nav = points[i].nav;
+    if (nav > max) max = nav;
+    map[points[i].ts] = max > 0 ? ((nav - max) / max) * 100 : 0;
+  }
+  return map;
+}
+
+/* ================================================================
+   五、渲染层：只读 state，互不调用
+   ================================================================ */
+
+/* ---------- 5.1 同步状态 ---------- */
+function renderSyncBadge() {
+  var badge = $('syncBadge'), text = $('syncText');
+  if (!badge || !text) return;
+  var map = {
+    synced: '已保存到本地',
+    syncing: '保存中…',
+    local: '本地模式',
+    error: '保存失败'
+  };
+  badge.setAttribute('data-state', state.syncState);
+  text.textContent = map[state.syncState] || '本地模式';
+}
+
+/* ---------- 5.2 今日待办区（铁律 5） ---------- */
+function renderTodayZone() {
+  var zone = $('todayZone');
+  if (!zone) return;
+  zone.innerHTML = '';
+
+  var items = [];
+
+  // 1) 有买入记录的基金，其最新净值数据是否过期
+  var codes = Object.keys(state.funds);
+  for (var i = 0; i < codes.length; i++) {
+    var f = state.funds[codes[i]];
+    if (!f || !f.points || !f.points.length) continue;
+    var latest = latestPoint(f.points);
+    if (!latest) continue;
+    var staleDays = Math.floor((Date.now() - latest.ts) / MS_DAY);
+    if (staleDays >= 3) {
+      items.push({
+        level: staleDays >= 7 ? 'danger' : 'warn',
+        text: '《' + f.name + '》净值数据已 ' + staleDays + ' 天未更新（最新 ' + toDateStr(latest.ts) + '）',
+        action: 'refresh',
+        code: f.code,
+        btn: '刷新净值'
+      });
+    } else if (f.full !== true) {
+      items.push({
+        level: 'warn',
+        text: '《' + f.name + '》净值尚未升级为成立以来全部历史',
+        action: 'refresh',
+        code: f.code,
+        btn: '升级数据'
+      });
+    }
+  }
+
+  // 2) 有买入记录但该基金未加载净值
+  var usedCodes = {};
+  for (var j = 0; j < state.records.length; j++) usedCodes[state.records[j].code] = true;
+  var usedList = Object.keys(usedCodes);
+  for (var k = 0; k < usedList.length; k++) {
+    if (!state.funds[usedList[k]]) {
+      items.push({
+        level: 'warn',
+        text: '基金 ' + usedList[k] + ' 有买入记录，但净值数据尚未加载',
+        action: 'load',
+        code: usedList[k],
+        btn: '加载净值'
+      });
+    }
+  }
+
+  // 3) 最近一次买入后跌幅较大（机会提示）
+  if (state.currentCode && state.funds[state.currentCode]) {
+    var fund = state.funds[state.currentCode];
+    var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
+    var en = enrichRecords(recs, fund);
+    if (en.length) {
+      var lastRec = en[en.length - 1];
+      if (lastRec.vsLatest != null && lastRec.vsLatest <= -10) {
+        items.push({
+          level: 'info',
+          text: '《' + fund.name + '》现价较你最近一次买入（' + lastRec.date + '）已' +
+                fmtPct(lastRec.vsLatest) + '，可考虑是否补仓',
+          action: null
+        });
+      }
+    }
+  }
+
+  // 4) 无数据时的引导（避免首屏空荡）
+  if (items.length === 0) {
+    if (!state.currentCode) {
+      items.push({
+        level: 'info',
+        text: '开始使用：输入 6 位基金代码 → 加载净值 → 添加你的买入记录',
+        action: null
+      });
+    } else {
+      var hasRec = state.records.some(function (r) { return r.code === state.currentCode; });
+      if (!hasRec) {
+        items.push({
+          level: 'info',
+          text: '《' + (state.funds[state.currentCode] || {}).name + '》还没有买卖记录，在下方添加第一笔',
+          action: null
+        });
+      } else {
+        items.push({
+          level: 'ok',
+          text: '一切正常，没有需要处理的异常',
+          action: null
+        });
+      }
+    }
+  }
+
+  var levelCls = { danger: 'tip-danger', warn: 'tip-warn', info: 'tip-info', ok: 'tip-info' };
+  var iconColor = { danger: '#ff5b5b', warn: '#ffb020', info: '#4f8cff', ok: '#26c281' };
+
+  var html = '<div style="margin-bottom:16px">';
+  for (var n = 0; n < items.length; n++) {
+    var it = items[n];
+    html += '<div class="tip ' + (levelCls[it.level] || 'tip-info') + '">';
+    html += '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' +
+            (iconColor[it.level] || '#4f8cff') + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+    if (it.level === 'ok') {
+      html += '<circle cx="12" cy="12" r="9"/><polyline points="8.5 12.5 11 15 15.5 9.5"/>';
+    } else {
+      html += '<circle cx="12" cy="12" r="9"/><line x1="12" y1="7.5" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12" y2="16.5"/>';
+    }
+    html += '</svg><span style="flex:1 1 auto">' + escapeHtml(it.text) + '</span>';
+    if (it.action) {
+      html += '<button class="btn btn-sm btn-ghost" data-today-action="' + it.action +
+              '" data-code="' + escapeHtml(it.code) + '">' + escapeHtml(it.btn) + '</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  zone.innerHTML = html;
+}
+
+/* ---------- 5.3 基金信息条 ---------- */
+function renderFundMeta() {
+  var meta = $('fundMeta');
+  if (!meta) return;
+  var fund = state.currentCode ? state.funds[state.currentCode] : null;
+  if (!fund) { meta.classList.remove('show'); return; }
+  meta.classList.add('show');
+  $('metaName').textContent = fund.name || '未知基金';
+  $('metaCode').textContent = fund.code;
+  var latest = latestPoint(fund.points);
+  $('metaUpdated').textContent = latest
+    ? ('最新净值 ' + fmt(latest.nav, 4) + '（' + toDateStr(latest.ts) + '）')
+    : '无净值数据';
+}
+
+/* ---------- 5.3b 我的基金表格（切换/置顶/排序/拖拽/删除） ---------- */
+
+/** 所有出现过的基金代码（funds ∪ records），按手动顺序规范化 */
+function normalizedFundOrder() {
+  var codes = {};
+  for (var i = 0; i < state.records.length; i++) codes[state.records[i].code] = true;
+  var fk = Object.keys(state.funds);
+  for (var j = 0; j < fk.length; j++) codes[fk[j]] = true;
+  var all = Object.keys(codes);
+  var order = [];
+  for (var k = 0; k < state.fundOrder.length; k++) {
+    if (all.indexOf(state.fundOrder[k]) >= 0) order.push(state.fundOrder[k]);
+  }
+  for (var m = 0; m < all.length; m++) {
+    if (order.indexOf(all[m]) < 0) order.push(all[m]);
+  }
+  return order;
+}
+
+/** 单只基金指标：笔数 / 浮动盈亏% / 成立以来最大回撤%（取回撤序列最小值） */
+function fundMetrics(code) {
+  var fund = state.funds[code];
+  var recs = [];
+  for (var i = 0; i < state.records.length; i++) {
+    if (state.records[i].code === code) recs.push(state.records[i]);
+  }
+  var out = { count: recs.length, profit: null, mdd: null };
+  if (fund && fund.points && fund.points.length) {
+    var s = summarize(enrichRecords(recs, fund));
+    out.profit = s.profitRate;
+    var ddMap = computeDrawdownMap(fund.points);
+    for (var ts in ddMap) {
+      if (ddMap.hasOwnProperty(ts)) {
+        var v = ddMap[ts];
+        if (out.mdd === null || v < out.mdd) out.mdd = v;
+      }
+    }
+  }
+  return out;
+}
+
+/** 展示顺序：置顶在前（保持手动序），其余按当前排序（手动 / 盈亏 / 回撤） */
+function fundDisplayList() {
+  var order = normalizedFundOrder();
+  var pinned = [], rest = [];
+  for (var i = 0; i < order.length; i++) {
+    if (state.fundPinned[order[i]]) pinned.push(order[i]);
+    else rest.push(order[i]);
+  }
+  var sort = state.fundSort || { key: '', dir: 'desc' };
+  if (sort.key) {
+    var dirMul = sort.dir === 'asc' ? 1 : -1;
+    var metrics = {};
+    for (var j = 0; j < rest.length; j++) metrics[rest[j]] = fundMetrics(rest[j]);
+    rest.sort(function (a, b) {
+      var va = sort.key === 'profit' ? metrics[a].profit : metrics[a].mdd;
+      var vb = sort.key === 'profit' ? metrics[b].profit : metrics[b].mdd;
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return (va - vb) * dirMul;
+    });
+  }
+  return pinned.concat(rest);
+}
+
+function renderFundTable() {
+  var body = $('fundBody'), empty = $('fundEmpty'), table = $('fundTable');
+  var cnt = $('fundListCount'), hint = $('fundSortHint');
+  if (!body) return;
+
+  var list = fundDisplayList();
+  if (cnt) cnt.textContent = list.length ? '共 ' + list.length + ' 只' : '';
+  if (hint) {
+    hint.textContent = state.fundSort.key
+      ? '按' + (state.fundSort.key === 'profit' ? '浮动盈亏' : '最大回撤') +
+        (state.fundSort.dir === 'desc' ? '从大到小' : '从小到大') + '，再点表头切换 / 恢复拖拽'
+      : '拖拽 ⋮ 调整顺序 · 点击表头按数值排序';
+  }
+
+  if (!list.length) {
+    body.innerHTML = '';
+    if (table) table.style.display = 'none';
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
+  if (table) table.style.display = '';
+  if (empty) empty.classList.add('hidden');
+
+  var manual = !state.fundSort.key;
+  var rows = [];
+  for (var i = 0; i < list.length; i++) {
+    var code = list[i];
+    var fund = state.funds[code];
+    var name = (fund && fund.name) || code;
+    var m = fundMetrics(code);
+    var isCur = code === state.currentCode;
+    var isPinned = !!state.fundPinned[code];
+    var rowCls = (isCur ? 'current ' : '') + (isPinned ? 'pinned' : '');
+
+    var profitHtml = m.profit == null
+      ? '<span style="color:var(--text-faint)">—</span>'
+      : '<span class="' + pctClass(m.profit) + '" style="font-weight:600">' + fmtPct(m.profit) + '</span>';
+    var mddHtml = m.mdd == null
+      ? '<span style="color:var(--text-faint)">—</span>'
+      : '<span class="' + pctClass(m.mdd) + '" style="font-weight:600">' + fmtPct(m.mdd) + '</span>';
+
+    rows.push(
+      '<tr data-code="' + escapeHtml(code) + '" class="' + rowCls + '"' + (manual ? ' draggable="true"' : '') + '>' +
+        '<td class="drag-col" data-label="">' +
+          (manual ? '<span class="drag-handle" title="拖拽排序">' +
+            '<svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">' +
+            '<circle cx="3" cy="2" r="1.4"/><circle cx="9" cy="2" r="1.4"/>' +
+            '<circle cx="3" cy="7" r="1.4"/><circle cx="9" cy="7" r="1.4"/>' +
+            '<circle cx="3" cy="12" r="1.4"/><circle cx="9" cy="12" r="1.4"/></svg></span>' : '') +
+        '</td>' +
+        '<td data-label="基金"><span class="f-name" data-act="switch" title="切换到该基金">' + escapeHtml(name) + '</span>' +
+          '<span class="f-code">' + escapeHtml(code) + '</span></td>' +
+        '<td data-label="笔数" class="num">' + m.count + '</td>' +
+        '<td data-label="浮动盈亏" class="num">' + profitHtml + '</td>' +
+        '<td data-label="最大回撤" class="num">' + mddHtml + '</td>' +
+        '<td data-label="操作" class="num"><div class="rec-actions">' +
+          '<button class="btn btn-sm btn-ghost' + (isPinned ? ' pin-star' : '') + '" data-act="pin" title="' +
+            (isPinned ? '取消置顶' : '置顶') + '">' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="' + (isPinned ? 'currentColor' : 'none') +
+            '" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>' +
+          '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="update" title="刷新净值（并升级为成立以来全部历史）">更新</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="del" title="删除该基金及其全部记录">删</button>' +
+        '</div></td>' +
+      '</tr>'
+    );
+  }
+  body.innerHTML = rows.join('');
+
+  var arrows = document.querySelectorAll('#fundTable .sort-arrow');
+  for (var a = 0; a < arrows.length; a++) {
+    var key = arrows[a].getAttribute('data-arrow');
+    arrows[a].textContent = (state.fundSort.key === key) ? (state.fundSort.dir === 'desc' ? '▼' : '▲') : '';
+  }
+}
+
+/** 拖拽换位：将 dragCode 放到 targetCode 之前/之后，并恢复手动排序模式 */
+function moveFund(dragCode, targetCode, before) {
+  var order = normalizedFundOrder();
+  var from = order.indexOf(dragCode);
+  if (from >= 0) order.splice(from, 1);
+  var to = order.indexOf(targetCode);
+  if (to < 0) order.push(dragCode);
+  else order.splice(before ? to : to + 1, 0, dragCode);
+  state.fundOrder = order;
+  state.fundSort.key = '';
+  state.fundSort.dir = 'desc';
+}
+
+function togglePinFund(code) {
+  if (state.fundPinned[code]) delete state.fundPinned[code];
+  else state.fundPinned[code] = true;
+  Store.save().then(function () { refreshAll(); });
+}
+
+function cycleFundSort(key) {
+  var s = state.fundSort;
+  if (s.key !== key) { s.key = key; s.dir = 'desc'; }
+  else if (s.dir === 'desc') { s.dir = 'asc'; }
+  else { s.key = ''; s.dir = 'desc'; }
+  Store.save().then(function () { refreshAll(); });
+}
+
+function deleteFund(code) {
+  var fund = state.funds[code];
+  var name = (fund && fund.name) || code;
+  var count = 0;
+  for (var i = 0; i < state.records.length; i++) {
+    if (state.records[i].code === code) count++;
+  }
+  showConfirm('删除基金',
+    '将删除 <b>' + escapeHtml(name) + '</b>（' + code + '）及其 ' + count + ' 条买入记录，此操作不可恢复。确定继续？',
+    '确认删除', function () {
+      delete state.funds[code];
+      state.records = state.records.filter(function (r) { return r.code !== code; });
+      delete state.fundPinned[code];
+      state.fundOrder = normalizedFundOrder();
+      if (state.currentCode === code) {
+        state.currentCode = state.records.length ? state.records[0].code : (Object.keys(state.funds)[0] || '');
+      }
+      state.batch.selected = {};
+      Store.save().then(function () {
+        refreshAll();
+        toast('已删除 ' + name, 'ok');
+      });
+    });
+}
+
+/* ---------- 5.4 图表（内联 SVG 手写） ---------- */
+function renderChart() {
+  var svg = $('chartSvg'), empty = $('chartEmpty');
+  if (!svg || !empty) return;
+
+  var fund = state.currentCode ? state.funds[state.currentCode] : null;
+  if (!fund || !fund.points || fund.points.length < 2) {
+    svg.__hoverCtx = null;
+    svg.classList.add('hidden');
+    empty.classList.remove('hidden');
+    hidePopup();
+    hideChartCrosshair();
+    return;
+  }
+
+  var points = sliceByRange(fund.points, state.range);
+  if (points.length < 2) {
+    svg.__hoverCtx = null;
+    svg.classList.add('hidden');
+    empty.classList.remove('hidden');
+    hideChartCrosshair();
+    return;
+  }
+
+  empty.classList.add('hidden');
+  svg.classList.remove('hidden');
+
+  // --- 准备买入点 ---
+  var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
+  var enriched = enrichRecords(recs, fund);
+
+  // --- 最大回撤：按「当前所选时间段内」的最高点计算 ---
+  var ddMap = computeDrawdownMap(points);
+
+  // --- 均线窗口基于完整历史，保证可见区间左端也有值 ---
+  var ma15Map = computeMA(fund.points, 15);
+  var ma60Map = computeMA(fund.points, 60);
+
+  var W = 900, H = 320;
+  var padL = 62, padR = 26, padT = 24, padB = 40;
+  var plotW = W - padL - padR;
+  var plotH = H - padT - padB;
+
+  var tsMin = points[0].ts, tsMax = points[points.length - 1].ts;
+  if (tsMax <= tsMin) tsMax = tsMin + MS_DAY;
+
+  var navArr = points.map(function (p) { return p.nav; });
+  var navMin = Math.min.apply(null, navArr);
+  var navMax = Math.max.apply(null, navArr);
+  if (navMax === navMin) { navMax = navMin + 0.1; }
+  var pad = (navMax - navMin) * 0.12;
+  navMin -= pad; navMax += pad;
+  if (navMin < 0) navMin = 0;
+
+  function X(ts) { return padL + ((ts - tsMin) / (tsMax - tsMin)) * plotW; }
+  function Y(nav) { return padT + (1 - (nav - navMin) / (navMax - navMin)) * plotH; }
+
+  var parts = [];
+
+  // --- 网格与 Y 轴刻度 ---
+  var yTicks = 5;
+  for (var i = 0; i <= yTicks; i++) {
+    var v = navMin + (navMax - navMin) * (i / yTicks);
+    var y = Y(v);
+    parts.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) +
+               '" y2="' + y.toFixed(1) + '" stroke="#252b3a" stroke-width="1"/>');
+    parts.push('<text x="' + (padL - 9) + '" y="' + (y + 4).toFixed(1) +
+               '" fill="#5f6779" font-size="11" text-anchor="end">' + fmt(v, 3) + '</text>');
+  }
+
+  // --- X 轴刻度（5 个） ---
+  var xTickCount = 5;
+  for (var j = 0; j < xTickCount; j++) {
+    var t = tsMin + (tsMax - tsMin) * (j / (xTickCount - 1));
+    var x = X(t);
+    parts.push('<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1) +
+               '" y2="' + (H - padB) + '" stroke="#252b3a" stroke-width="1" stroke-dasharray="1 0"/>');
+    parts.push('<text x="' + x.toFixed(1) + '" y="' + (H - padB + 20) +
+               '" fill="#5f6779" font-size="11" text-anchor="middle">' + toDateStr(t).slice(2) + '</text>');
+  }
+
+  // --- 净值曲线 ---
+  var d = '';
+  for (var k = 0; k < points.length; k++) {
+    d += (k === 0 ? 'M' : 'L') + X(points[k].ts).toFixed(1) + ' ' + Y(points[k].nav).toFixed(1) + ' ';
+  }
+
+  // 面积渐变
+  var areaD = d + 'L' + X(points[points.length - 1].ts).toFixed(1) + ' ' + (H - padB) +
+              ' L' + X(points[0].ts).toFixed(1) + ' ' + (H - padB) + ' Z';
+  parts.push('<defs><linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">' +
+             '<stop offset="0%" stop-color="#4f8cff" stop-opacity="0.26"/>' +
+             '<stop offset="100%" stop-color="#4f8cff" stop-opacity="0"/></linearGradient></defs>');
+  parts.push('<path d="' + areaD + '" fill="url(#navGrad)"/>');
+  parts.push('<path d="' + d + '" fill="none" stroke="#4f8cff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+
+  // --- 均线（15/60 日，虚线；窗口不足处自动断开） ---
+  function maPath(map) {
+    var md = '', pen = false;
+    for (var mk = 0; mk < points.length; mk++) {
+      var mv = map[points[mk].ts];
+      if (mv == null) { pen = false; continue; }
+      md += (pen ? 'L' : 'M') + X(points[mk].ts).toFixed(1) + ' ' + Y(mv).toFixed(1) + ' ';
+      pen = true;
+    }
+    return md;
+  }
+  parts.push('<path d="' + maPath(ma15Map) + '" fill="none" stroke="#ffb020" stroke-width="1.4" stroke-dasharray="6 4" stroke-linejoin="round"/>');
+  parts.push('<path d="' + maPath(ma60Map) + '" fill="none" stroke="#b57bff" stroke-width="1.4" stroke-dasharray="3 5" stroke-linejoin="round"/>');
+
+  // --- 最新净值点（需求 A：延伸到最新交易日，标注相对最近一次买入的涨跌） ---
+  var latestNav = points[points.length - 1];
+  parts.push('<circle cx="' + X(latestNav.ts).toFixed(1) + '" cy="' + Y(latestNav.nav).toFixed(1) +
+             '" r="4" fill="#4f8cff" stroke="#0f1116" stroke-width="2"/>');
+
+  var visibleIds = {};
+  for (var m = 0; m < points.length; m++) {
+    // 用日期字符串做可见性判断
+    visibleIds[toDateStr(points[m].ts)] = true;
+  }
+
+  // --- 买入/卖出点标记 ---
+  var SELL_COLOR = '#ff9f43';
+  var markers = [];
+  for (var n = 0; n < enriched.length; n++) {
+    var it = enriched[n];
+    if (it.nav == null || !it.navDate) continue;
+    if (!visibleIds[it.navDate]) continue;
+
+    var cx = X(dateStrToTs(it.navDate));
+    var cy = Y(it.nav);
+    var isSell = (it.type === 'sell');
+
+    var isBase = (!isSell && it.vsPrev == null);
+    var color = isSell ? SELL_COLOR
+      : (isBase ? '#8d95a8' : (it.vsPrev > 0 ? '#ff5b5b' : (it.vsPrev < 0 ? '#26c281' : '#8d95a8')));
+
+    // 买入 = 圆点，卖出 = 橙色菱形
+    if (isSell) {
+      parts.push('<rect x="' + (cx - 5.5).toFixed(1) + '" y="' + (cy - 5.5).toFixed(1) +
+                 '" width="11" height="11" transform="rotate(45 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')' +
+                 '" fill="' + color + '" stroke="#0f1116" stroke-width="2.5" data-marker="' + n + '"/>');
+    } else {
+      parts.push('<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="6" fill="' + color +
+                 '" stroke="#0f1116" stroke-width="2.5" data-marker="' + n + '"/>');
+    }
+
+    // 标签：相对上一次买入的涨跌幅（卖出点同样标注）
+    var label = isBase ? '基准' : fmtPct(it.vsPrev, 1);
+    var labelW = label.length * 7.2 + 14;
+    var anchor = cx + labelW + 4 > W - padR ? 'end' : 'start';
+    var lx = anchor === 'end' ? cx - 11 : cx + 11;
+    var ly = cy - 12;
+
+    parts.push('<g pointer-events="none">' +
+               '<rect x="' + (anchor === 'end' ? lx - labelW : lx) + '" y="' + (ly - 13) +
+               '" width="' + labelW + '" height="19" rx="5" fill="' + color +
+               '" fill-opacity="' + (isBase ? '0.22' : '0.9') + '"/>' +
+               '<text x="' + (anchor === 'end' ? lx - labelW / 2 : lx + labelW / 2) + '" y="' + (ly + 1) +
+               '" fill="' + (isBase ? '#8d95a8' : '#fff') + '" font-size="11.5" font-weight="600" ' +
+               'text-anchor="middle">' + label + '</text></g>');
+
+    markers.push({ idx: n, x: cx, y: cy, item: it });
+  }
+
+  // --- 悬停十字准线（位置由鼠标事件更新） ---
+  parts.push('<g id="xhair" style="display:none" pointer-events="none">' +
+             '<line id="xhairLine" x1="0" x2="0" y1="' + padT + '" y2="' + (H - padB) +
+             '" stroke="#4f8cff" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>' +
+             '<circle id="xhairDot" r="4.5" fill="#0f1116" stroke="#4f8cff" stroke-width="2"/></g>');
+
+  svg.innerHTML = parts.join('');
+
+  // 供悬停交互使用的几何与数据上下文
+  var buyByDate = {}, ddByDate = {};
+  for (var q = 0; q < enriched.length; q++) {
+    if (enriched[q].navDate) buyByDate[enriched[q].navDate] = enriched[q];
+  }
+  for (var w = 0; w < points.length; w++) {
+    ddByDate[toDateStr(points[w].ts)] = ddMap[points[w].ts];
+  }
+  svg.__hoverCtx = {
+    W: W, points: points,
+    tsMin: tsMin, tsMax: tsMax,
+    navMin: navMin, navMax: navMax,
+    padL: padL, padR: padR, padT: padT, padB: padB,
+    plotW: plotW, plotH: plotH,
+    dd: ddByDate, buy: buyByDate,
+    ma15: ma15Map, ma60: ma60Map
+  };
+  ensureChartHover(svg);
+
+  // --- 图例 ---
+  var legendHtml = '';
+  legendHtml += '<span class="legend-item"><span class="legend-line"></span>基金净值</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#ffb020"></span>15日均线</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#b57bff"></span>60日均线</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff5b5b"></span>买入点（较上次上涨）</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#26c281"></span>买入点（较上次下跌）</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#8d95a8"></span>首次买入（基准）</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff9f43;border-radius:2px;transform:rotate(45deg)"></span>卖出点（较上次买入）</span>';
+  if (enriched.length) {
+    var lastIt = enriched[enriched.length - 1];
+    if (lastIt.vsLatest != null) {
+      legendHtml += '<span class="legend-item" style="margin-left:auto">' +
+        '最新净值相对最近一次买入：<span class="badge ' + badgeClass(lastIt.vsLatest) + '">' +
+        fmtPct(lastIt.vsLatest) + '</span></span>';
+    }
+  }
+  $('chartLegend').innerHTML = legendHtml;
+}
+
+/* ---------- 5.5 数据概览 ---------- */
+function renderStats() {
+  var grid = $('statGrid');
+  if (!grid) return;
+
+  var fund = state.currentCode ? state.funds[state.currentCode] : null;
+  var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
+  var en = fund ? enrichRecords(recs, fund) : [];
+  var s = summarize(en);
+
+  if (!fund || en.length === 0) {
+    grid.innerHTML =
+      card('买入笔数', s.count + ' 笔', '') +
+      card('投入本金', '¥' + fmtMoney(s.totalAmount), '') +
+      card('浮动盈亏', '<span class="val-flat">—</span>', '需加载净值数据');
+    return;
+  }
+
+  var profitCls = pctClass(s.profitRate);
+
+  var opNote = '买 ' + s.buyCount + ' · 卖 ' + s.sellCount;
+  if (s.validVsPrev > 0) opNote += ' · ' + s.cheaperCount + ' 次买在更低位';
+
+  grid.innerHTML =
+    card('操作笔数', s.count + ' 笔', opNote) +
+    card('投入本金', '¥' + fmtMoney(s.totalAmount),
+         s.sellAmount > 0 ? ('卖出回款 ¥' + fmtMoney(s.sellAmount)) : '') +
+    card('浮动盈亏',
+         s.profitRate == null ? '<span class="val-flat">—</span>'
+           : '<span class="' + profitCls + '">' + fmtPct(s.profitRate) + '</span>',
+         s.profitRate == null ? '需加载净值数据' : '相对投入本金');
+}
+
+function card(label, value, note) {
+  return '<div class="stat"><div class="stat-label">' + escapeHtml(label) + '</div>' +
+         '<div class="stat-value sm">' + value + '</div>' +
+         (note ? '<div class="stat-note">' + note + '</div>' : '') + '</div>';
+}
+
+/* ---------- 5.6 买入记录表 ---------- */
+function renderRecords() {
+  var body = $('recBody'), empty = $('recEmpty'), table = $('recTable'), cnt = $('recCount');
+  if (!body) return;
+
+  var batchPane = $('batchPane');
+  var formRow = $('recFormRow');
+  var recWrap = $('recTableWrap');
+  var modeLabel = $('batchModeLabel');
+  var bulkPane = $('bulkPane');
+  var bulkLabel = $('bulkModeLabel');
+
+  // —— 批量新增模式（跨基金批量买入/卖出） ——
+  if (state.bulk.active) {
+    if (bulkLabel) bulkLabel.textContent = '完成';
+    if (formRow) formRow.classList.add('hidden');
+    if (recWrap) recWrap.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (batchPane) batchPane.classList.add('hidden');
+    if (bulkPane) bulkPane.classList.remove('hidden');
+    if (cnt) cnt.textContent = state.records.length + ' 笔';
+    buildBulkChecks();
+    return;
+  }
+  if (bulkLabel) bulkLabel.textContent = '批量新增';
+  if (bulkPane) bulkPane.classList.add('hidden');
+
+  if (state.batch.active) {
+    // 批量模式：跨基金展示全部记录
+    if (modeLabel) modeLabel.textContent = '退出批量';
+    if (formRow) formRow.classList.add('hidden');
+    if (recWrap) recWrap.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (batchPane) batchPane.classList.remove('hidden');
+    if (bulkPane) bulkPane.classList.add('hidden');
+    if (cnt) cnt.textContent = state.records.length + ' 笔';
+
+    // —— 批量表格渲染 ——
+    var bBody = $('batchBody'), bEmpty = $('batchEmpty');
+    var bFilter = $('batchFilter'), bCount = $('batchCount');
+
+    var bCodes = normalizedFundOrder();
+    if (bFilter) {
+      var bCur = state.batch.filterCode || '';
+      var bOpts = '<option value="">全部基金</option>';
+      for (var bi = 0; bi < bCodes.length; bi++) {
+        var bc = bCodes[bi];
+        var bnm = (state.funds[bc] && state.funds[bc].name) || bc;
+        bOpts += '<option value="' + escapeHtml(bc) + '">' + escapeHtml(bnm) + '（' + bc + '）</option>';
+      }
+      bFilter.innerHTML = bOpts;
+      bFilter.value = bCur;
+      if (bFilter.value !== bCur) { bFilter.value = ''; state.batch.filterCode = ''; }
+    }
+
+    var bAll = state.records.slice().sort(function (a, b) {
+      var ta = dateStrToTs(a.date), tb = dateStrToTs(b.date);
+      if (ta !== tb) return tb - ta;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+    var bList = [];
+    for (var bj = 0; bj < bAll.length; bj++) {
+      if (!state.batch.filterCode || bAll[bj].code === state.batch.filterCode) bList.push(bAll[bj]);
+    }
+
+    var bSel = {}, bSelCount = 0;
+    for (var bk = 0; bk < bList.length; bk++) {
+      if (state.batch.selected[bList[bk].id]) { bSel[bList[bk].id] = true; bSelCount++; }
+    }
+    state.batch.selected = bSel;
+
+    if (bCount) bCount.textContent = String(bSelCount);
+    updateBatchButtons(bSelCount);
+
+    if (!bList.length) {
+      bBody.innerHTML = '';
+      if (bEmpty) bEmpty.classList.remove('hidden');
+      return;
+    }
+    if (bEmpty) bEmpty.classList.add('hidden');
+
+    var bRows = [];
+    for (var bn = 0; bn < bList.length; bn++) {
+      var br = bList[bn];
+      var bnm2 = (state.funds[br.code] && state.funds[br.code].name) || br.code;
+      var bType = br.type === 'sell'
+        ? '<span class="badge badge-sell">卖出</span>'
+        : '<span class="badge badge-buy">买入</span>';
+      bRows.push(
+        '<tr>' +
+          '<td><input type="checkbox" data-id="' + escapeHtml(br.id) + '"' + (state.batch.selected[br.id] ? ' checked' : '') + '></td>' +
+          '<td data-label="基金">' + escapeHtml(bnm2) +
+            ' <span style="color:var(--text-faint);font-size:12px">' + escapeHtml(br.code) + '</span></td>' +
+          '<td data-label="类型">' + bType + '</td>' +
+          '<td data-label="日期" class="rec-date">' + escapeHtml(br.date) + '</td>' +
+          '<td data-label="金额" class="num">¥' + fmtMoney(br.amount) + '</td>' +
+          '<td data-label="备注">' + (br.note ? escapeHtml(br.note) : '<span style="color:var(--text-faint)">—</span>') + '</td>' +
+        '</tr>'
+      );
+    }
+    bBody.innerHTML = bRows.join('');
+
+    var bCheckAll = $('batchCheckAll');
+    if (bCheckAll) bCheckAll.checked = bSelCount > 0 && bSelCount === bList.length;
+    return;
+  }
+
+  if (modeLabel) modeLabel.textContent = '批量管理';
+  if (formRow) formRow.classList.remove('hidden');
+  if (batchPane) batchPane.classList.add('hidden');
+  if (bulkPane) bulkPane.classList.add('hidden');
+  if (recWrap) recWrap.classList.remove('hidden');
+
+  var fund = state.currentCode ? state.funds[state.currentCode] : null;
+  var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
+  var en = enrichRecords(recs, fund);
+
+  if (cnt) cnt.textContent = en.length + ' 笔';
+
+  if (en.length === 0) {
+    body.innerHTML = '';
+    if (table) table.style.display = 'none';
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
+  if (table) table.style.display = '';
+  if (empty) empty.classList.add('hidden');
+
+  var rows = [];
+  // 倒序显示（最新在上）
+  for (var i = en.length - 1; i >= 0; i--) {
+    var it = en[i];
+    var isSellRow = (it.type === 'sell');
+
+    var typeBadge = isSellRow
+      ? '<span class="badge badge-sell">卖出</span>'
+      : '<span class="badge badge-buy">买入</span>';
+
+    var vsPrevHtml = it.vsPrev == null
+      ? (isSellRow ? '<span style="color:var(--text-faint)">—</span>'
+                   : '<span class="badge badge-base">基准</span>')
+      : (isSellRow
+          ? '<span class="badge badge-sell">' + fmtPct(it.vsPrev) + '</span>'
+          : '<span class="badge ' + badgeClass(it.vsPrev) + '">' + fmtPct(it.vsPrev) + '</span>');
+
+    var vsLatestHtml = (it.vsLatest == null || isSellRow)
+      ? '<span style="color:var(--text-faint)">—</span>'
+      : '<span class="' + pctClass(it.vsLatest) + '" style="font-weight:600">' + fmtPct(it.vsLatest) + '</span>';
+
+    var navCell = it.nav == null
+      ? '<span style="color:var(--text-faint)">待加载</span>'
+      : fmt(it.nav, 4) + (it.navIsExact ? '' : '<span style="color:var(--text-faint);font-size:11.5px"> *</span>');
+
+    var sharesCell = it.shares == null ? '—' : fmt(it.shares, 2);
+    var noteCell = it.note ? escapeHtml(it.note) : '<span style="color:var(--text-faint)">—</span>';
+
+    rows.push(
+      '<tr>' +
+        '<td data-label="日期" class="rec-date">' + escapeHtml(it.date) + '</td>' +
+        '<td data-label="类型">' + typeBadge + '</td>' +
+        '<td data-label="金额" class="num">¥' + fmtMoney(it.amount) + '</td>' +
+        '<td data-label="当日净值" class="num">' + navCell + '</td>' +
+        '<td data-label="份额" class="num">' + sharesCell + '</td>' +
+        '<td data-label="备注">' + noteCell + '</td>' +
+        '<td data-label="较上次买入" class="num">' + vsPrevHtml + '</td>' +
+        '<td data-label="持有至最新" class="num">' + vsLatestHtml + '</td>' +
+        '<td data-label="操作" class="num"><div class="rec-actions">' +
+          '<button class="btn btn-sm btn-ghost" data-act="edit" data-id="' + it.id + '">改</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="' + it.id + '">删</button>' +
+        '</div></td>' +
+      '</tr>'
+    );
+  }
+  body.innerHTML = rows.join('');
+
+  // 表格底部小注
+  var needStar = en.some(function (x) { return x.nav != null && !x.navIsExact; });
+  if (needStar) {
+    var wrap = table.parentNode;
+    var old = wrap.querySelector('.nav-note');
+    if (old) old.remove();
+    wrap.appendChild(el('div', 'nav-note',
+      '<span style="font-size:12px;color:var(--text-faint);display:block;margin-top:10px">' +
+      '* 该买入日为非交易日，净值取此前最近一个交易日的收盘净值</span>'));
+  }
+}
+
+/* ---------- 5.7 批量管理（跨基金） ---------- */
+
+function updateBatchButtons(n) {
+  var ids = ['btnBatchDate', 'btnBatchAmount', 'btnBatchNote', 'btnBatchDel'];
+  for (var i = 0; i < ids.length; i++) {
+    var b = $(ids[i]);
+    if (b) b.disabled = n === 0;
+  }
+}
+
+function selectedBatchIds() {
+  var ids = [];
+  for (var id in state.batch.selected) {
+    if (state.batch.selected.hasOwnProperty(id) && state.batch.selected[id]) ids.push(id);
+  }
+  return ids;
+}
+
+function batchSelectedRecords() {
+  var ids = selectedBatchIds();
+  var out = [];
+  for (var i = 0; i < state.records.length; i++) {
+    if (ids.indexOf(state.records[i].id) >= 0) out.push(state.records[i]);
+  }
+  return out;
+}
+
+function selectAllBatch(on) {
+  state.batch.selected = {};
+  if (on) {
+    for (var i = 0; i < state.records.length; i++) {
+      var r = state.records[i];
+      if (!state.batch.filterCode || r.code === state.batch.filterCode) state.batch.selected[r.id] = true;
+    }
+  }
+  renderRecords();
+}
+
+function setBatchMode(on) {
+  state.batch.active = !!on;
+  if (on) state.bulk.active = false;
+  else {
+    state.batch.selected = {};
+    state.batch.filterCode = '';
+  }
+  refreshAll();
+}
+
+function setBulkMode(on) {
+  state.bulk.active = !!on;
+  if (on) state.batch.active = false;
+  else state.bulk.selected = {};
+  refreshAll();
+}
+
+function buildBulkChecks() {
+  var box = $('bulkFundChecks'), count = $('bulkCount');
+  if (!box) return;
+  var codes = normalizedFundOrder();
+  var html = '', selCount = 0;
+  for (var i = 0; i < codes.length; i++) {
+    var c = codes[i];
+    var nm = (state.funds[c] && state.funds[c].name) || c;
+    var checked = !!state.bulk.selected[c];
+    if (checked) selCount++;
+    html += '<label class="check-chip"><input type="checkbox" data-code="' + escapeHtml(c) + '"' +
+            (checked ? ' checked' : '') + '><span>' + escapeHtml(nm) + ' <em>' + escapeHtml(c) + '</em></span></label>';
+  }
+  box.innerHTML = html;
+  if (count) count.textContent = String(selCount);
+}
+
+function submitBulkRecords() {
+  var type = state.bulk.type === 'sell' ? 'sell' : 'buy';
+  var date = ($('bulkDate') || {}).value || '';
+  var amount = Number(($('bulkAmount') || {}).value);
+  var note = (($('bulkNote') || {}).value || '').trim().slice(0, 30);
+
+  if (isNaN(dateStrToTs(date))) { toast('请选择有效日期', 'err'); return; }
+  if (dateStrToTs(date) > Date.now() + MS_DAY) { toast('日期不能晚于今天', 'err'); return; }
+  if (!isFinite(amount) || amount <= 0) { toast('请输入大于 0 的金额', 'err'); return; }
+
+  var codes = [];
+  for (var c in state.bulk.selected) {
+    if (state.bulk.selected.hasOwnProperty(c) && state.bulk.selected[c]) codes.push(c);
+  }
+  if (!codes.length) { toast('请先勾选要操作的基金', 'err'); return; }
+
+  var now = Date.now();
+  for (var i = 0; i < codes.length; i++) {
+    state.records.push({
+      id: uid(), code: codes[i], type: type, date: date,
+      amount: amount, note: note, createdAt: now + i
+    });
+  }
+  Store.save().then(function () {
+    state.bulk.selected = {};
+    refreshAll();
+    toast('已为 ' + codes.length + ' 只基金添加' + (type === 'buy' ? '买入' : '卖出') + '记录', 'ok');
+  });
+}
+
+/* ================================================================
+   六、交互层：事件处理（改数据 → 调 refreshAll）
+   ================================================================ */
+
+/**
+ * 图表悬停交互：十字准线 + 跟随浮层
+ * 普通点显示 日期 / 单位净值 / 较昨日 / 最大回撤；
+ * 悬停到买入点时额外显示 买入金额、份额、较上次买入、持有至最新。
+ * 监听器只在首次渲染时挂一次（svg.__hoverInit 防重复），数据从 svg.__hoverCtx 读取。
+ */
+function ensureChartHover(svg) {
+  if (svg.__hoverInit) return;
+  svg.__hoverInit = true;
+
+  function geom(c, ts, nav) {
+    return {
+      x: c.padL + ((ts - c.tsMin) / (c.tsMax - c.tsMin)) * c.plotW,
+      y: c.padT + (1 - (nav - c.navMin) / (c.navMax - c.navMin)) * c.plotH
+    };
+  }
+
+  /** 二分找最近交易日（lo 为第一个 >= ts 的点，与前一比较取更近者） */
+  function nearestPoint(c, ts) {
+    var pts = c.points;
+    var lo = 0, hi = pts.length - 1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (pts[mid].ts < ts) lo = mid + 1; else hi = mid;
+    }
+    if (lo > 0 && Math.abs(pts[lo - 1].ts - ts) < Math.abs(pts[lo].ts - ts)) return pts[lo - 1];
+    return pts[lo];
+  }
+
+  function setXhair(c, pt, show) {
+    var g = svg.querySelector('#xhair');
+    if (!g) return;
+    if (!show) { g.style.display = 'none'; return; }
+    var p = geom(c, pt.ts, pt.nav);
+    var line = g.querySelector('#xhairLine');
+    var dot = g.querySelector('#xhairDot');
+    g.style.display = '';
+    if (line) {
+      line.setAttribute('x1', p.x.toFixed(1));
+      line.setAttribute('x2', p.x.toFixed(1));
+    }
+    if (dot) {
+      dot.setAttribute('cx', p.x.toFixed(1));
+      dot.setAttribute('cy', p.y.toFixed(1));
+    }
+  }
+
+  function onMove(clientX, clientY) {
+    var c = svg.__hoverCtx;
+    if (!c) return;
+    var rect = svg.getBoundingClientRect();
+    if (!rect || !rect.width) return;
+
+    // 屏幕坐标 → viewBox 坐标（viewBox 宽恒为 c.W）
+    var vx = (clientX - rect.left) / rect.width * c.W;
+    if (vx < c.padL - 4 || vx > c.W - c.padR + 4) {
+      setXhair(c, null, false);
+      hidePopup();
+      return;
+    }
+
+    var ts = c.tsMin + ((vx - c.padL) / c.plotW) * (c.tsMax - c.tsMin);
+    if (ts < c.tsMin) ts = c.tsMin;
+    if (ts > c.tsMax) ts = c.tsMax;
+    var pt = nearestPoint(c, ts);
+    if (!pt) return;
+    setXhair(c, pt, true);
+
+    var dateStr = toDateStr(pt.ts);
+    var item = c.buy[dateStr];
+    var dd = c.dd[dateStr];
+    var ddVal = '<span class="popup-val ' + pctClass(dd) + '">' + fmtPct(dd) + '</span>';
+    var ma15v = c.ma15 ? c.ma15[pt.ts] : null;
+    var ma60v = c.ma60 ? c.ma60[pt.ts] : null;
+    var maRows =
+      '<div class="popup-row"><span class="popup-key" style="color:#ffb020">15日均线</span><span class="popup-val">' +
+      (ma15v == null ? '—' : fmt(ma15v, 4)) + '</span></div>' +
+      '<div class="popup-row"><span class="popup-key" style="color:#b57bff">60日均线</span><span class="popup-val">' +
+      (ma60v == null ? '—' : fmt(ma60v, 4)) + '</span></div>';
+    var vsPrevRow = (item && item.vsPrev == null)
+      ? '<div class="popup-row"><span class="popup-key">较上次买入</span><span class="popup-val" style="color:#5f6779">首次买入</span></div>'
+      : (item
+          ? '<div class="popup-row"><span class="popup-key">较上次买入</span><span class="popup-val ' +
+            pctClass(item.vsPrev) + '">' + fmtPct(item.vsPrev) + '</span></div>'
+          : '');
+
+    if (item && item.type === 'sell') {
+      // 卖出点
+      var hs = '<div style="font-weight:650;margin-bottom:5px;font-size:13px;color:#ff9f43">卖出点</div>' +
+        '<div class="popup-row"><span class="popup-key">日期</span><span class="popup-val">' + escapeHtml(item.date) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">净值</span><span class="popup-val">' + fmt(item.nav, 4) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">卖出金额</span><span class="popup-val">¥' + fmtMoney(item.amount) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">卖出份额</span><span class="popup-val">' + fmt(item.shares, 2) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">剩余份额</span><span class="popup-val">' +
+        (item.remainingShares == null ? '—' : fmt(item.remainingShares, 2)) + '</span></div>' +
+        '<div class="popup-row" style="margin-top:5px;padding-top:5px;border-top:1px solid #2a3040">' +
+        '<span class="popup-key">最大回撤</span>' + ddVal + '</div>' +
+        maRows + vsPrevRow;
+      showPopup(hs, clientX, clientY);
+    } else if (item) {
+      // 买入点：完整买入信息 + 最大回撤 + 均线
+      var h = '<div style="font-weight:650;margin-bottom:5px;font-size:13px">买入点</div>' +
+        '<div class="popup-row"><span class="popup-key">日期</span><span class="popup-val">' + escapeHtml(item.date) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">净值</span><span class="popup-val">' + fmt(item.nav, 4) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">金额</span><span class="popup-val">¥' + fmtMoney(item.amount) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">份额</span><span class="popup-val">' + fmt(item.shares, 2) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">持有至最新</span><span class="popup-val ' +
+        pctClass(item.vsLatest) + '">' + (item.vsLatest == null ? '—' : fmtPct(item.vsLatest)) + '</span></div>' +
+        '<div class="popup-row" style="margin-top:5px;padding-top:5px;border-top:1px solid #2a3040">' +
+        '<span class="popup-key">最大回撤</span>' + ddVal + '</div>' +
+        maRows + vsPrevRow;
+      showPopup(h, clientX, clientY);
+    } else {
+      // 普通净值点：日期 / 净值 / 较昨日 / 最大回撤 / 均线
+      var h2 = '<div style="font-weight:650;margin-bottom:5px;font-size:13px">净值</div>' +
+        '<div class="popup-row"><span class="popup-key">日期</span><span class="popup-val">' + dateStr + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">单位净值</span><span class="popup-val">' + fmt(pt.nav, 4) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">较昨日</span><span class="popup-val ' + pctClass(pt.daily) + '">' +
+        (pt.daily == null ? '—' : fmtPct(pt.daily)) + '</span></div>' +
+        '<div class="popup-row"><span class="popup-key">最大回撤</span>' + ddVal + '</div>' + maRows;
+      showPopup(h2, clientX, clientY);
+    }
+  }
+
+  svg.addEventListener('mousemove', function (e) { onMove(e.clientX, e.clientY); }, false);
+  svg.addEventListener('mouseleave', function () {
+    setXhair(svg.__hoverCtx, null, false);
+    hidePopup();
+  }, false);
+  svg.addEventListener('touchstart', function (e) {
+    var t = e.touches && e.touches[0];
+    if (t) onMove(t.clientX, t.clientY);
+  }, { passive: true });
+  svg.addEventListener('touchmove', function (e) {
+    var t = e.touches && e.touches[0];
+    if (t) onMove(t.clientX, t.clientY);
+  }, { passive: true });
+}
+
+function hideChartCrosshair() {
+  var svg = $('chartSvg');
+  if (!svg) return;
+  var g = svg.querySelector('#xhair');
+  if (g) g.style.display = 'none';
+}
+
+function showPopup(html, cx, cy) {
+  var popup = $('popup');
+  if (!popup) return;
+  popup.innerHTML = html;
+  popup.classList.add('show');
+  var pw = popup.offsetWidth || 170, ph = popup.offsetHeight || 90;
+  var x = cx + 14, y = cy + 14;
+  if (x + pw > window.innerWidth - 8) x = cx - pw - 14;
+  if (y + ph > window.innerHeight - 8) y = cy - ph - 14;
+  if (x < 6) x = 6;
+  if (y < 6) y = 6;
+  popup.style.left = x + 'px';
+  popup.style.top = y + 'px';
+}
+function hidePopup() {
+  var p = $('popup');
+  if (p) p.classList.remove('show');
+}
+
+/* ---------- Toast ---------- */
+var toastTimer = null;
+function toast(msg, type) {
+  var layer = $('toastLayer');
+  if (!layer) return;
+  var t = el('div', 'toast ' + (type || ''), escapeHtml(msg));
+  layer.appendChild(t);
+  setTimeout(function () {
+    t.style.transition = 'opacity .3s';
+    t.style.opacity = '0';
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 320);
+  }, 2600);
+  // 最多保留 3 个
+  while (layer.children.length > 3) layer.removeChild(layer.firstChild);
+}
+
+/* ---------- 确认弹窗 ---------- */
+var confirmCallback = null;
+function showConfirm(title, text, okLabel, cb) {
+  var layer = $('modalLayer');
+  if (!layer) return;
+  $('modalTitle').textContent = title;
+  $('modalText').innerHTML = text;
+  $('modalConfirm').textContent = okLabel || '确定';
+  confirmCallback = cb;
+  layer.classList.add('show');
+}
+function closeConfirm() {
+  var layer = $('modalLayer');
+  if (layer) layer.classList.remove('show');
+  confirmCallback = null;
+}
+
+/* ---------- 同步状态 ---------- */
+function setSync(s) {
+  state.syncState = s;
+  renderSyncBadge();
+}
+
+/* ================================================================
+   七、业务动作
+   ================================================================ */
+
+/** 带超时的 fetch JSON */
+function fetchJson(url, opts, timeout) {
+  var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = null;
+  if (ctrl) {
+    opts = opts || {};
+    opts.signal = ctrl.signal;
+    timer = setTimeout(function () { ctrl.abort(); }, timeout || CFG.API_TIMEOUT);
+  }
+  return fetch(url, opts || {})
+    .then(function (r) {
+      if (timer) clearTimeout(timer);
+      return r.json();
+    })
+    .catch(function (e) {
+      if (timer) clearTimeout(timer);
+      throw e;
+    });
+}
+
+/** 加载某基金净值（keepCurrent=true 时仅更新数据，不切换当前查看的基金） */
+function loadFundNav(code, silent, keepCurrent) {
+  if (state.loading) return Promise.resolve(false);
+  state.loading = true;
+
+  var btn = $('btnLoadFund');
+  if (btn && !silent) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 加载中';
+  }
+
+  return fetchJson('/api/fund/nav?code=' + encodeURIComponent(code))
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || '加载失败');
+      var d = j.data;
+      state.funds[d.code] = {
+        code: d.code,
+        name: d.name,
+        points: d.points || [],
+        acPoints: d.acPoints || [],
+        updatedAt: d.updatedAt,
+        full: d.full === true,
+        inceptionTs: d.inceptionTs || ((d.points && d.points.length) ? d.points[0].ts : null),
+        fetchedAt: Date.now()
+      };
+      if (!keepCurrent) state.currentCode = d.code;
+      return Store.save().then(function () {
+        refreshAll();
+        if (!silent) toast('已加载《' + d.name + '》共 ' + (d.points || []).length + ' 个交易日净值', 'ok');
+        return true;
+      });
+    })
+    .catch(function (e) {
+      if (!silent) toast('加载失败：' + (e.message || '网络异常，请确认本地服务已启动'), 'err');
+      return false;
+    })
+    .then(function (r) {
+      state.loading = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML =
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+          'stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/>' +
+          '<polyline points="21 4 21 9 16 9"/></svg> 加载净值';
+      }
+      return r;
+    });
+}
+
+/** 添加买入/卖出记录 */
+function addRecord(type, date, amount, note) {
+  if (type !== 'buy' && type !== 'sell') type = 'buy';
+  if (!state.currentCode) { toast('请先选择并加载基金', 'err'); return false; }
+
+  var ts = dateStrToTs(date);
+  if (isNaN(ts)) { toast('请选择有效的日期', 'err'); return false; }
+
+  var amt = Number(amount);
+  if (!isFinite(amt) || amt <= 0) {
+    toast('请输入大于 0 的' + (type === 'sell' ? '卖出' : '买入') + '金额', 'err');
+    return false;
+  }
+
+  if (ts > Date.now() + MS_DAY) { toast('日期不能晚于今天', 'err'); return false; }
+
+  state.records.push({
+    id: uid(),
+    code: state.currentCode,
+    type: type,
+    date: date,
+    amount: amt,
+    note: String(note || '').trim(),
+    createdAt: Date.now()
+  });
+
+  Store.save().then(function (ok) {
+    refreshAll();
+    if (!ok) toast('已保存在浏览器本地，但写入本地文件失败', 'err');
+  });
+
+  // 若该日期早于已加载序列起点，提示
+  var fund = state.funds[state.currentCode];
+  if (fund && fund.points && fund.points.length) {
+    if (ts < fund.points[0].ts) {
+      toast('该日期早于已加载的净值区间（' + toDateStr(fund.points[0].ts) + ' 起），无法计算当日净值', 'err');
+    }
+  }
+  return true;
+}
+
+/** 删除买入记录 */
+function deleteRecord(id) {
+  state.records = state.records.filter(function (r) { return r.id !== id; });
+  Store.save().then(function () { refreshAll(); });
+}
+
+/** 修改买入记录 */
+function editRecord(id) {
+  var rec = null;
+  for (var i = 0; i < state.records.length; i++) {
+    if (state.records[i].id === id) { rec = state.records[i]; break; }
+  }
+  if (!rec) return;
+
+  var input = window.prompt('修改金额（元）：当前 ¥' + rec.amount, String(rec.amount));
+  if (input === null) return;
+  var amt = Number(input);
+  if (!isFinite(amt) || amt <= 0) { toast('金额无效，未修改', 'err'); return; }
+  rec.amount = amt;
+
+  var nd = window.prompt('修改日期（YYYY-MM-DD）：当前 ' + rec.date, rec.date);
+  if (nd !== null) {
+    if (isNaN(dateStrToTs(nd))) toast('日期格式无效，已保留原日期', 'err');
+    else rec.date = nd;
+  }
+
+  var nn = window.prompt('修改备注：当前「' + (rec.note || '无') + '」', rec.note || '');
+  if (nn !== null) rec.note = String(nn).trim().slice(0, 30);
+
+  Store.save().then(function () {
+    refreshAll();
+    toast('已更新', 'ok');
+  });
+}
+
+/** 导出 JSON */
+function exportJson() {
+  var data = Store.serialize();
+  var str = JSON.stringify(data, null, 2);
+  var blob = new Blob([str], { type: 'application/json;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var d = new Date();
+  a.href = url;
+  a.download = '基金工作台备份_' + toDateStr(d.getTime()) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+
+  var n = state.records.length;
+  toast('已导出备份（' + n + ' 条买入记录 · ' + Object.keys(state.funds).length + ' 只基金）', 'ok');
+}
+
+/** 导入 JSON */
+function importJson(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data || typeof data !== 'object' || (!data.records && !data.funds)) {
+        throw new Error('文件内容不是有效的备份数据');
+      }
+      showConfirm(
+        '导入数据',
+        '将用备份文件中的数据替换当前全部数据（当前 ' + state.records.length + ' 条记录、' +
+        Object.keys(state.funds).length + ' 只基金）。此操作不可撤销，确定继续？',
+        '确认导入',
+        function () {
+          state.funds = {};
+          state.records = [];
+          state.currentCode = '';
+          Store.applyData(data);
+          if (!state.currentCode && state.records.length) {
+            state.currentCode = state.records[0].code;
+          }
+          Store.save().then(function () {
+            refreshAll();
+            toast('导入成功：' + state.records.length + ' 条记录', 'ok');
+          });
+        }
+      );
+    } catch (err) {
+      toast('导入失败：' + (err.message || '文件格式错误'), 'err');
+    }
+  };
+  reader.onerror = function () { toast('读取文件失败', 'err'); };
+  reader.readAsText(file, 'utf-8');
+}
+
+/* ---------- 预置示例数据（铁律 6） ---------- */
+function seedDemoData() {
+  var demoCode = '110022';
+  state.funds[demoCode] = {
+    code: demoCode,
+    name: '易方达消费行业股票',
+    points: [],
+    acPoints: [],
+    updatedAt: null,
+    fetchedAt: 0
+  };
+  state.currentCode = demoCode;
+
+  var base = Date.now();
+  var mk = function (daysAgo, amount, note, type) {
+    return {
+      id: uid(),
+      code: demoCode,
+      type: type || 'buy',
+      date: toDateStr(base - daysAgo * MS_DAY),
+      amount: amount,
+      note: note,
+      createdAt: base - daysAgo * MS_DAY
+    };
+  };
+  state.records = [
+    mk(120, 1000, '首次定投'),
+    mk(90, 800, '补仓'),
+    mk(45, 1200, '定投'),
+    mk(10, 1000, '加仓'),
+    mk(3, 500, '部分止盈', 'sell')
+  ];
+  Store.save();
+}
+
+/* ================================================================
+   八、调度层：唯一刷新入口（铁律 9）
+   ================================================================ */
+function refreshAll() {
+  // 顺序固定，各渲染函数互相独立、互不调用
+  renderSyncBadge();
+  renderTodayZone();
+  renderFundTable();
+  renderFundMeta();
+  renderChart();
+  renderStats();
+  renderRecords();
+}
+
+/* ================================================================
+   九、事件绑定与初始化
+   ================================================================ */
+var suggestTimer = null;
+var suggestItems = [];
+var suggestIndex = -1;
+
+function renderSuggest(list, keyword) {
+  var box = $('fundSuggest');
+  if (!box) return;
+  suggestItems = list || [];
+  suggestIndex = -1;
+
+  if (!suggestItems.length) {
+    box.innerHTML = '<div class="suggest-empty">未找到匹配的基金，请检查代码</div>';
+    box.classList.add('show');
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < suggestItems.length; i++) {
+    var it = suggestItems[i];
+    html += '<div class="suggest-item" data-code="' + escapeHtml(it.code) + '" data-index="' + i + '">' +
+            '<span class="suggest-code">' + escapeHtml(it.code) + '</span>' +
+            '<span class="suggest-name">' + escapeHtml(it.name) + '</span></div>';
+  }
+  box.innerHTML = html;
+  box.classList.add('show');
+}
+
+function hideSuggest() {
+  var box = $('fundSuggest');
+  if (box) box.classList.remove('show');
+}
+
+function bindEvents() {
+
+  /* ---- 基金搜索 ---- */
+  var input = $('fundInput');
+  if (input) {
+    input.addEventListener('input', function () {
+      var v = this.value.trim();
+      clearTimeout(suggestTimer);
+      if (!v) { hideSuggest(); return; }
+
+      // 6 位纯数字 → 直接校验
+      if (/^\d{6}$/.test(v)) {
+        suggestTimer = setTimeout(function () {
+          fetchJson('/api/fund/search?key=' + encodeURIComponent(v))
+            .then(function (j) {
+              if (j && j.ok) renderSuggest(j.data, v);
+              else hideSuggest();
+            })
+            .catch(function () { hideSuggest(); });
+        }, 240);
+        return;
+      }
+      if (v.length < 2) { hideSuggest(); return; }
+      suggestTimer = setTimeout(function () {
+        fetchJson('/api/fund/search?key=' + encodeURIComponent(v))
+          .then(function (j) {
+            if (j && j.ok) renderSuggest(j.data, v);
+            else hideSuggest();
+          })
+          .catch(function () { hideSuggest(); });
+      }, 340);
+    });
+
+    input.addEventListener('keydown', function (e) {
+      var box = $('fundSuggest');
+      var open = box && box.classList.contains('show');
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (open && suggestIndex >= 0 && suggestItems[suggestIndex]) {
+          pickFund(suggestItems[suggestIndex].code);
+        } else if (/^\d{6}$/.test(this.value.trim())) {
+          hideSuggest();
+          loadFundNav(this.value.trim());
+        }
+        return;
+      }
+      if (!open) return;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var n = suggestItems.length;
+        if (!n) return;
+        suggestIndex = e.key === 'ArrowDown'
+          ? (suggestIndex + 1) % n
+          : (suggestIndex - 1 + n) % n;
+        var nodes = box.querySelectorAll('.suggest-item');
+        for (var i = 0; i < nodes.length; i++) {
+          nodes[i].classList.toggle('active', i === suggestIndex);
+        }
+      } else if (e.key === 'Escape') {
+        hideSuggest();
+      }
+    });
+
+    input.addEventListener('blur', function () {
+      setTimeout(hideSuggest, 180);
+    });
+  }
+
+  // 搜索下拉点击（事件委托）
+  var suggestBox = $('fundSuggest');
+  if (suggestBox) {
+    suggestBox.addEventListener('mousedown', function (e) {
+      var t = e.target;
+      while (t && t !== suggestBox && !t.getAttribute('data-code')) t = t.parentNode;
+      if (t && t !== suggestBox) {
+        e.preventDefault();
+        pickFund(t.getAttribute('data-code'));
+      }
+    });
+  }
+
+  /* ---- 加载基金按钮 ---- */
+  var btnLoad = $('btnLoadFund');
+  if (btnLoad) {
+    btnLoad.addEventListener('click', function () {
+      var v = ($('fundInput') || {}).value || '';
+      v = v.trim();
+      if (!/^\d{6}$/.test(v)) { toast('请输入 6 位基金代码', 'err'); return; }
+      hideSuggest();
+      loadFundNav(v);
+    });
+  }
+
+  /* ---- 我的基金表格：切换 / 置顶 / 更新 / 删除 ---- */
+  var dragFundCode = null;
+  function trWithCode(node) {
+    while (node && node !== document) {
+      if (node.tagName === 'TR' && node.getAttribute('data-code')) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+  function clearDragStyle() {
+    var trs = document.querySelectorAll('#fundBody tr');
+    for (var i = 0; i < trs.length; i++) trs[i].classList.remove('dragging', 'drop-target');
+  }
+
+  var fundBody = $('fundBody');
+  if (fundBody) {
+    fundBody.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== fundBody && !t.getAttribute('data-act')) t = t.parentNode;
+      if (!t || t === fundBody) return;
+      var act = t.getAttribute('data-act');
+      var tr = trWithCode(t);
+      var code = tr ? tr.getAttribute('data-code') : null;
+      if (!code) return;
+
+      if (act === 'switch') {
+        if (code !== state.currentCode) {
+          state.currentCode = code;
+          Store.save();
+          refreshAll();
+        }
+      } else if (act === 'pin') {
+        togglePinFund(code);
+      } else if (act === 'del') {
+        deleteFund(code);
+      } else if (act === 'update') {
+        var inp = $('fundInput');
+        if (inp) inp.value = code;
+        loadFundNav(code, false, true);
+      }
+    });
+
+    // 拖拽排序（仅手动排序模式；行已带 draggable）
+    fundBody.addEventListener('dragstart', function (e) {
+      var tr = trWithCode(e.target);
+      if (!tr || tr.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+      dragFundCode = tr.getAttribute('data-code');
+      tr.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragFundCode); } catch (err) {}
+      }
+    });
+    fundBody.addEventListener('dragover', function (e) {
+      if (!dragFundCode) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      var tr = trWithCode(e.target);
+      clearDragStyle();
+      if (tr && tr.getAttribute('data-code') !== dragFundCode) tr.classList.add('drop-target');
+    });
+    fundBody.addEventListener('drop', function (e) {
+      if (!dragFundCode) return;
+      e.preventDefault();
+      var tr = trWithCode(e.target);
+      if (tr && tr.getAttribute('data-code') !== dragFundCode) {
+        var targetCode = tr.getAttribute('data-code');
+        var rect = tr.getBoundingClientRect();
+        moveFund(dragFundCode, targetCode, rect ? (e.clientY - rect.top) < rect.height / 2 : true);
+        Store.save().then(function () { refreshAll(); });
+      }
+      dragFundCode = null;
+      clearDragStyle();
+    });
+    fundBody.addEventListener('dragend', function () {
+      dragFundCode = null;
+      clearDragStyle();
+    });
+  }
+
+  /* ---- 我的基金：表头排序 ---- */
+  var fundTable = $('fundTable');
+  if (fundTable) {
+    fundTable.addEventListener('click', function (e) {
+      var th = e.target;
+      while (th && th !== fundTable && !(th.tagName === 'TH' && th.getAttribute('data-sort'))) th = th.parentNode;
+      if (!th || th === fundTable) return;
+      cycleFundSort(th.getAttribute('data-sort'));
+    });
+  }
+
+  /* ---- 批量管理 ---- */
+  var btnBatchMode = $('btnBatchMode');
+  if (btnBatchMode) {
+    btnBatchMode.addEventListener('click', function () { setBatchMode(!state.batch.active); });
+  }
+
+  var batchBody = $('batchBody');
+  if (batchBody) {
+    batchBody.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || t.type !== 'checkbox' || !t.getAttribute('data-id')) return;
+      var id = t.getAttribute('data-id');
+      if (t.checked) state.batch.selected[id] = true;
+      else delete state.batch.selected[id];
+      renderRecords();
+    });
+  }
+
+  var batchFilter = $('batchFilter');
+  if (batchFilter) {
+    batchFilter.addEventListener('change', function () {
+      state.batch.filterCode = this.value;
+      renderRecords();
+    });
+  }
+
+  var batchCheckAll = $('batchCheckAll');
+  if (batchCheckAll) {
+    batchCheckAll.addEventListener('change', function () {
+      selectAllBatch(this.checked);
+    });
+  }
+
+  var btnBatchAll = $('btnBatchAll');
+  if (btnBatchAll) btnBatchAll.addEventListener('click', function () { selectAllBatch(true); });
+
+  var btnBatchNone = $('btnBatchNone');
+  if (btnBatchNone) btnBatchNone.addEventListener('click', function () { selectAllBatch(false); });
+
+  var btnBatchDel = $('btnBatchDel');
+  if (btnBatchDel) {
+    btnBatchDel.addEventListener('click', function () {
+      var sel = batchSelectedRecords();
+      if (!sel.length) return;
+      showConfirm('批量删除',
+        '确定删除选中的 <b>' + sel.length + '</b> 条买入记录吗？此操作不可恢复。',
+        '批量删除', function () {
+          var ids = selectedBatchIds();
+          state.records = state.records.filter(function (r) { return ids.indexOf(r.id) < 0; });
+          state.batch.selected = {};
+          Store.save().then(function () {
+            refreshAll();
+            toast('已批量删除 ' + ids.length + ' 条记录', 'ok');
+          });
+        });
+    });
+  }
+
+  var btnBatchDate = $('btnBatchDate');
+  if (btnBatchDate) {
+    btnBatchDate.addEventListener('click', function () {
+      var sel = batchSelectedRecords();
+      if (!sel.length) return;
+      var input = window.prompt('将选中的 ' + sel.length + ' 条记录的买入日期统一改为（YYYY-MM-DD）：', todayStr());
+      if (input === null) return;
+      if (isNaN(dateStrToTs(input))) { toast('日期格式无效，未修改', 'err'); return; }
+      for (var i = 0; i < sel.length; i++) sel[i].date = input;
+      Store.save().then(function () {
+        refreshAll();
+        toast('已批量修改 ' + sel.length + ' 条记录的日期', 'ok');
+      });
+    });
+  }
+
+  var btnBatchAmount = $('btnBatchAmount');
+  if (btnBatchAmount) {
+    btnBatchAmount.addEventListener('click', function () {
+      var sel = batchSelectedRecords();
+      if (!sel.length) return;
+      var input = window.prompt('将选中的 ' + sel.length + ' 条记录的金额统一改为（元）：', '1000');
+      if (input === null) return;
+      var amt = Number(input);
+      if (!isFinite(amt) || amt <= 0) { toast('金额无效，未修改', 'err'); return; }
+      for (var i = 0; i < sel.length; i++) sel[i].amount = amt;
+      Store.save().then(function () {
+        refreshAll();
+        toast('已批量修改 ' + sel.length + ' 条记录的金额', 'ok');
+      });
+    });
+  }
+
+  var btnBatchNote = $('btnBatchNote');
+  if (btnBatchNote) {
+    btnBatchNote.addEventListener('click', function () {
+      var sel = batchSelectedRecords();
+      if (!sel.length) return;
+      var input = window.prompt('将选中的 ' + sel.length + ' 条记录的备注统一改为（留空则清空备注）：', '');
+      if (input === null) return;
+      var note = String(input).trim().slice(0, 30);
+      for (var i = 0; i < sel.length; i++) sel[i].note = note;
+      Store.save().then(function () {
+        refreshAll();
+        toast('已批量修改 ' + sel.length + ' 条记录的备注', 'ok');
+      });
+    });
+  }
+
+  /* ---- 批量新增（多基金批量买入/卖出） ---- */
+  var btnBulkMode = $('btnBulkMode');
+  if (btnBulkMode) {
+    btnBulkMode.addEventListener('click', function () { setBulkMode(!state.bulk.active); });
+  }
+
+  var btnBulkExit = $('btnBulkExit');
+  if (btnBulkExit) {
+    btnBulkExit.addEventListener('click', function () { setBulkMode(false); });
+  }
+
+  var bulkTypeSeg = $('bulkTypeSeg');
+  if (bulkTypeSeg) {
+    bulkTypeSeg.addEventListener('click', function (e) {
+      var b = e.target;
+      while (b && b !== bulkTypeSeg && !b.getAttribute('data-type')) b = b.parentNode;
+      if (!b || b === bulkTypeSeg) return;
+      state.bulk.type = b.getAttribute('data-type');
+      var segBtns = bulkTypeSeg.querySelectorAll('.seg-btn');
+      for (var bi = 0; bi < segBtns.length; bi++) {
+        segBtns[bi].classList.toggle('active', segBtns[bi].getAttribute('data-type') === state.bulk.type);
+      }
+    });
+  }
+
+  var bulkChecks = $('bulkFundChecks');
+  if (bulkChecks) {
+    bulkChecks.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || t.type !== 'checkbox' || !t.getAttribute('data-code')) return;
+      var code = t.getAttribute('data-code');
+      if (t.checked) state.bulk.selected[code] = true;
+      else delete state.bulk.selected[code];
+      var n = 0;
+      for (var k in state.bulk.selected) {
+        if (state.bulk.selected.hasOwnProperty(k) && state.bulk.selected[k]) n++;
+      }
+      var c = $('bulkCount');
+      if (c) c.textContent = String(n);
+    });
+  }
+
+  var btnBulkSubmit = $('btnBulkSubmit');
+  if (btnBulkSubmit) {
+    btnBulkSubmit.addEventListener('click', submitBulkRecords);
+  }
+
+  /* ---- 今日待办区的操作按钮 ---- */
+  var todayZone = $('todayZone');
+  if (todayZone) {
+    todayZone.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== todayZone && !t.getAttribute('data-today-action')) t = t.parentNode;
+      if (!t || t === todayZone) return;
+      var act = t.getAttribute('data-today-action');
+      var code = t.getAttribute('data-code');
+      if (act === 'refresh') {
+        var inp = $('fundInput');
+        if (inp) inp.value = code;
+        loadFundNav(code, false, true);  // 刷新数据但不切换当前查看的基金
+      } else if (act === 'load') {
+        var inp2 = $('fundInput');
+        if (inp2) inp2.value = code;
+        loadFundNav(code);
+      }
+    });
+  }
+
+  /* ---- 区间切换 ---- */
+  var rangeGroup = $('rangeGroup');
+  if (rangeGroup) {
+    rangeGroup.addEventListener('click', function (e) {
+      var t = e.target;
+      var r = t && t.getAttribute ? t.getAttribute('data-range') : null;
+      if (!r) return;
+      state.range = r;
+      var btns = rangeGroup.querySelectorAll('.range-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', btns[i].getAttribute('data-range') === r);
+      }
+      renderChart();  // 只刷新图表，属同层独立渲染，不触发其他渲染函数
+    });
+  }
+
+  /* ---- 添加买入/卖出记录 ---- */
+  var btnAdd = $('btnAddRec');
+  if (btnAdd) {
+    btnAdd.addEventListener('click', function () {
+      var date = ($('recDate') || {}).value || '';
+      var amount = ($('recAmount') || {}).value || '';
+      var note = ($('recNote') || {}).value || '';
+      var ok = addRecord(state.recType || 'buy', date, amount, note);
+      if (ok) {
+        if ($('recAmount')) $('recAmount').value = '';
+        if ($('recNote')) $('recNote').value = '';
+      }
+    });
+  }
+
+  /* ---- 录入类型切换（买入/卖出） ---- */
+  var recTypeSeg = $('recTypeSeg');
+  if (recTypeSeg) {
+    recTypeSeg.addEventListener('click', function (e) {
+      var b = e.target;
+      while (b && b !== recTypeSeg && !b.getAttribute('data-type')) b = b.parentNode;
+      if (!b || b === recTypeSeg) return;
+      var t = b.getAttribute('data-type');
+      state.recType = t;
+      var segBtns = recTypeSeg.querySelectorAll('.seg-btn');
+      for (var si = 0; si < segBtns.length; si++) {
+        segBtns[si].classList.toggle('active', segBtns[si].getAttribute('data-type') === t);
+      }
+      var lbl = $('recAmountLabel');
+      if (lbl) lbl.textContent = (t === 'sell' ? '卖出金额（元）' : '买入金额（元）');
+    });
+  }
+
+  /* ---- 记录表操作（事件委托） ---- */
+  var recBody = $('recBody');
+  if (recBody) {
+    recBody.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== recBody && !t.getAttribute('data-act')) t = t.parentNode;
+      if (!t || t === recBody) return;
+      var act = t.getAttribute('data-act');
+      var id = t.getAttribute('data-id');
+      var rec = null;
+      for (var i = 0; i < state.records.length; i++) {
+        if (state.records[i].id === id) { rec = state.records[i]; break; }
+      }
+      if (!rec) return;
+
+      if (act === 'del') {
+        showConfirm('删除买入记录',
+          '确定删除 <b>' + escapeHtml(rec.date) + '</b> 的这笔买入（¥' + fmtMoney(rec.amount) + '）吗？',
+          '删除', function () {
+            deleteRecord(id);
+            toast('已删除', 'ok');
+          });
+      } else if (act === 'edit') {
+        editRecord(id);
+      }
+    });
+  }
+
+  /* ---- 导出 / 导入 ---- */
+  var btnExport = $('btnExport');
+  if (btnExport) btnExport.addEventListener('click', exportJson);
+
+  var btnImport = $('btnImport');
+  var importFile = $('importFile');
+  if (btnImport && importFile) {
+    btnImport.addEventListener('click', function () { importFile.value = ''; importFile.click(); });
+    importFile.addEventListener('change', function () {
+      if (this.files && this.files[0]) importJson(this.files[0]);
+    });
+  }
+
+  /* ---- 模态框 ---- */
+  var mc = $('modalCancel');
+  if (mc) mc.addEventListener('click', closeConfirm);
+  var mk = $('modalConfirm');
+  if (mk) {
+    mk.addEventListener('click', function () {
+      var cb = confirmCallback;
+      closeConfirm();
+      if (typeof cb === 'function') cb();
+    });
+  }
+  var ml = $('modalLayer');
+  if (ml) {
+    ml.addEventListener('click', function (e) {
+      if (e.target === ml) closeConfirm();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closeConfirm(); hideSuggest(); hidePopup(); }
+  });
+
+  /* ---- 窗口滚动时隐藏浮层与十字线 ---- */
+  window.addEventListener('scroll', function () { hidePopup(); hideChartCrosshair(); }, { passive: true });
+  window.addEventListener('resize', function () { hidePopup(); hideChartCrosshair(); }, { passive: true });
+}
+
+/* ================================================================
+   十、启动
+   ================================================================ */
+function initDefaultForm() {
+  var d = $('recDate');
+  if (d) d.value = todayStr();
+  var bd = $('bulkDate');
+  if (bd) bd.value = todayStr();
+}
+
+function boot() {
+  initDefaultForm();
+  bindEvents();
+
+  Store.init()
+    .then(function () {
+      // 首次打开且完全无数据 → 预置示例
+      if (state.records.length === 0 && Object.keys(state.funds).length === 0) {
+        seedDemoData();
+      }
+      // 若当前基金有记录但未加载净值，自动静默加载
+      var need = null;
+      if (state.currentCode && (!state.funds[state.currentCode] || !state.funds[state.currentCode].points.length)) {
+        need = state.currentCode;
+      } else if (!state.currentCode && state.records.length) {
+        state.currentCode = state.records[0].code;
+        need = state.funds[state.currentCode] && state.funds[state.currentCode].points.length ? null : state.currentCode;
+      }
+
+      refreshAll();
+
+      // 旧数据升级：净值仅含近5年的基金 → 静默拉取成立以来全部历史（逐只串行）
+      function startUpgrade() {
+        var upgrade = [];
+        for (var code in state.funds) {
+          if (state.funds.hasOwnProperty(code) &&
+              state.funds[code].points && state.funds[code].points.length &&
+              state.funds[code].full !== true) {
+            upgrade.push(code);
+          }
+        }
+        var idx = 0;
+        (function next() {
+          if (idx >= upgrade.length) return;
+          loadFundNav(upgrade[idx++], true, true).then(next);
+        })();
+      }
+
+      if (need) {
+        // 静默加载，成功后 refreshAll
+        loadFundNav(need, true).then(function () { refreshAll(); startUpgrade(); });
+      } else {
+        startUpgrade();
+      }
+
+      // 数据量提示（超过 30 条温和提醒备份）
+      setTimeout(function () {
+        if (state.records.length >= 30) {
+          toast('数据已积累 ' + state.records.length + ' 条，建议点右上角「备份」导出保存', 'ok');
+        }
+      }, 1200);
+    })
+    .catch(function (e) {
+      console.error('初始化失败', e);
+      refreshAll();
+    });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+
+})();
+</script>
+
+
+
+</body></html>
