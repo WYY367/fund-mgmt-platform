@@ -5,6 +5,9 @@
 .smoke/tmp-server/
 .smoke/tmp-*.log
 
+# WorkBuddy 工作区元数据（智能体提示词/记忆），不公开
+.workbuddy/
+
 # 本地临时产物（工作空间内的跑测脚本与日志，用完即删）
 .wb-*
 
