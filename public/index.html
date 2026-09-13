@@ -218,6 +218,8 @@ input, select { font-family: inherit; }
 .drag-handle:active { cursor: grabbing; }
 tr.dragging { opacity: .4; }
 tr.drop-target { box-shadow: inset 0 2px 0 var(--accent); }
+/* 显式声明可拖拽：若被外部/残留样式把 -webkit-user-drag 置为 none，拖拽会静默失效 */
+.funds tr[draggable="true"], .drag-handle { -webkit-user-drag: element; }
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--text); }
 .sort-arrow { font-size: 10px; margin-left: 3px; color: var(--accent); }
@@ -517,7 +519,7 @@ th.num { text-align: right; }
   .batch-spacer { display: none; }
 }
 </style>
-<style id="__dm_no_drag_style__">* { -webkit-user-drag: none !important; }</style><style id="__dm_bindable_badge_style__">[data-sp-bindable="database"]{outline:1px dashed #0088ff;outline-offset:2px;border-radius:4px;}[data-sp-bindable="database"] *{pointer-events:none !important;transition:none !important;animation:none !important;}[data-sp-bindable="database"]{transition:none !important;animation:none !important;}</style></head>
+</head>
 <body data-page-node-id="qRUJOX0CociGLE8LETQaAD" style="">
 <div class="app" data-page-node-id="iWsGs7pMyTA6sSRVF6Tn1f">
 
@@ -579,12 +581,13 @@ th.num { text-align: right; }
             <th class="drag-col" style="width:34px" data-page-node-id="xwERQE0pzLkiP0EXKKLiEe"></th>
             <th data-page-node-id="ZPxt3XfLqpUnoI0qJJz3s2">基金</th>
             <th class="num" style="width: 64px; text-align: center;" data-page-node-id="49QgngGVjAOPNTsOJ91BoQ">笔数</th>
-            <th class="num sortable" data-sort="profit" style="width: 110px; text-align: center;" data-page-node-id="fqih3CqaaaLx9Tus9BWTHb">浮动盈亏<span class="sort-arrow" data-arrow="profit" data-page-node-id="xy7k7yfZSfXL7AEYciug1n"></span></th>
-            <th class="num sortable" data-sort="dd" style="width: 130px; text-align: center;" data-page-node-id="UKz6unc3xu8gLhynHosCjy">成立以来最大回撤<span class="sort-arrow" data-arrow="dd" data-page-node-id="1nlRMTLNBYQ7balZvcUpnS"></span></th>
-            <th class="num" style="width: 150px; text-align: center;" data-page-node-id="4pJI2DF0sFS5rBEuV2rQg1">操作</th>
+            <th class="num sortable" data-sort="vsBuy" style="width: 118px; text-align: center;" title="最新净值相对最后一次买入净值的涨跌幅（含分红）；无买入记录时留空" data-page-node-id="fqih3CqaaaLx9Tus9BWTHb">相较于前次买入<span class="sort-arrow" data-arrow="vsBuy" data-page-node-id="xy7k7yfZSfXL7AEYciug1n"></span></th>
+            <th class="num sortable" data-sort="vsSell" style="width: 118px; text-align: center;" title="最新净值相对最后一次卖出净值的涨跌幅（含分红）；无卖出记录时留空" data-page-node-id="aQK4F0zHnH6WqLZKmRkVe1">相较于前次卖出<span class="sort-arrow" data-arrow="vsSell" data-page-node-id="pR2dQ8sTn3mYvXcJbW4kLz"></span></th>
+            <th class="num sortable" data-sort="mdd" style="width: 130px; text-align: center;" data-page-node-id="UKz6unc3xu8gLhynHosCjy">成立以来最大回撤<span class="sort-arrow" data-arrow="mdd" data-page-node-id="1nlRMTLNBYQ7balZvcUpnS"></span></th>
+            <th class="num" style="width: 230px; text-align: center;" data-page-node-id="4pJI2DF0sFS5rBEuV2rQg1">操作</th>
           </tr>
         </thead>
-        <tbody id="fundBody" data-page-node-id="oRyMBXtIrQF3POhgmSNd4T"><tr data-code="110022" class="current " draggable="true"><td class="drag-col" data-label=""><span class="drag-handle" title="拖拽排序"><svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3" cy="2" r="1.4"></circle><circle cx="9" cy="2" r="1.4"></circle><circle cx="3" cy="7" r="1.4"></circle><circle cx="9" cy="7" r="1.4"></circle><circle cx="3" cy="12" r="1.4"></circle><circle cx="9" cy="12" r="1.4"></circle></svg></span></td><td data-label="基金"><span class="f-name" data-act="switch" title="切换到该基金">易方达消费行业股票</span><span class="f-code">110022</span></td><td data-label="笔数" class="num">4</td><td data-label="浮动盈亏" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="最大回撤" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="pin" title="置顶"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"></path></svg></button><button class="btn btn-sm btn-ghost" data-act="update" title="刷新净值（并升级为成立以来全部历史）">更新</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" title="删除该基金及其全部记录">删</button></div></td></tr></tbody>
+        <tbody id="fundBody" data-page-node-id="oRyMBXtIrQF3POhgmSNd4T"><tr data-code="110022" class="current " draggable="true"><td class="drag-col" data-label=""><span class="drag-handle" title="拖拽排序"><svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3" cy="2" r="1.4"></circle><circle cx="9" cy="2" r="1.4"></circle><circle cx="3" cy="7" r="1.4"></circle><circle cx="9" cy="7" r="1.4"></circle><circle cx="3" cy="12" r="1.4"></circle><circle cx="9" cy="12" r="1.4"></circle></svg></span></td><td data-label="基金"><span class="f-name" data-act="switch" title="切换到该基金">易方达消费行业股票</span><span class="f-code">110022</span></td><td data-label="笔数" class="num">4</td><td data-label="相较于前次买入" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="相较于前次卖出" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="最大回撤" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="pin" title="置顶"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"></path></svg></button><button class="btn btn-sm btn-ghost" data-act="source" title="在天天基金（数据源）查看该基金详情，新标签页打开"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>详情</button><button class="btn btn-sm btn-ghost" data-act="update" title="刷新净值（并升级为成立以来全部历史）">更新</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" title="删除该基金及其全部记录">删</button></div></td></tr></tbody>
       </table>
     </div>
     <div class="empty hidden" id="fundEmpty" data-page-node-id="URxIDPq7SnpkKd39Ud8CB3">
@@ -667,7 +670,7 @@ th.num { text-align: right; }
   </div>
 
   <!-- ============ 数据概览 ============ -->
-  <div class="stat-grid" id="statGrid" data-page-node-id="kR0cJSJIOXSr0yZzaqYXyf"><div class="stat"><div class="stat-label">操作笔数</div><div class="stat-value sm">4 笔</div><div class="stat-note">买 4 · 卖 0</div></div><div class="stat"><div class="stat-label">投入本金</div><div class="stat-value sm">¥4,000.00</div></div><div class="stat"><div class="stat-label">浮动盈亏</div><div class="stat-value sm"><span class="val-flat">—</span></div><div class="stat-note">需加载净值数据</div></div></div>
+  <div class="stat-grid" id="statGrid" data-page-node-id="kR0cJSJIOXSr0yZzaqYXyf"><div class="stat"><div class="stat-label">操作笔数</div><div class="stat-value sm">4 笔</div><div class="stat-note">买 4 · 卖 0</div></div><div class="stat"><div class="stat-label">投入本金</div><div class="stat-value sm">¥4,000.00</div></div><div class="stat"><div class="stat-label">相较于前次买入</div><div class="stat-value sm"><span class="val-flat">—</span></div><div class="stat-note">需加载净值数据</div></div><div class="stat"><div class="stat-label">相较于前次卖出</div><div class="stat-value sm"><span class="val-flat">—</span></div><div class="stat-note">需加载净值数据</div></div></div>
 
   <!-- ============ 买卖记录 ============ -->
   <div class="card" data-page-node-id="CVkKPQAW6HfgZg9CT7o1jn">
@@ -732,11 +735,11 @@ th.num { text-align: right; }
             <th class="num" data-page-node-id="lb65PhdyS3st1Dm2zOLI64" style="text-align: center;">份额</th>
             <th data-page-node-id="NVulndfz2Vv4UVPcsbZgda" style="text-align: left;">备注</th>
             <th class="num" data-page-node-id="XsS7k6bzeQ7Hl69ttecDzl" style="text-align: center;" title="相对上一次买入的涨跌幅，已按累计净值口径计入分红">较上次买入</th>
-            <th class="num" data-page-node-id="3SJLijBt8bCmk2rkVbybEw" style="text-align: center;" title="相对最新净值的涨跌幅，已按累计净值口径计入分红">持有至最新</th>
+            <th class="num" data-page-node-id="nV8sQ2wYr7KdJmTxLcPbAe" style="text-align: center;" title="相对上一次卖出的涨跌幅，已按累计净值口径计入分红">较上次卖出</th>
             <th class="num" data-page-node-id="35iNeWcBfAcpir5GAQgIpE" style="text-align: center;">操作</th>
           </tr>
         </thead>
-        <tbody id="recBody" data-page-node-id="TSErQx131xntQ99sWauEzm"><tr><td data-label="日期" class="rec-date">2026-09-02</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">加仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws742km35h">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws742km35h">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-07-29</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,200.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74nknfv1">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74nknfv1">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-06-14</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥800.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">补仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74cb7l2a">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74cb7l2a">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-05-15</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">首次定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="持有至最新" class="num"><span style="color:var(--text-faint)">—</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws744v5mi5">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws744v5mi5">删</button></div></td></tr></tbody>
+        <tbody id="recBody" data-page-node-id="TSErQx131xntQ99sWauEzm"><tr><td data-label="日期" class="rec-date">2026-09-02</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">加仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws742km35h">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws742km35h">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-07-29</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,200.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74nknfv1">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74nknfv1">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-06-14</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥800.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">补仓</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws74cb7l2a">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws74cb7l2a">删</button></div></td></tr><tr><td data-label="日期" class="rec-date">2026-05-15</td><td data-label="类型"><span class="badge badge-buy">买入</span></td><td data-label="金额" class="num">¥1,000.00</td><td data-label="当日净值" class="num"><span style="color:var(--text-faint)">待加载</span></td><td data-label="份额" class="num">—</td><td data-label="备注">首次定投</td><td data-label="较上次买入" class="num"><span class="badge badge-base">基准</span></td><td data-label="操作" class="num"><div class="rec-actions"><button class="btn btn-sm btn-ghost" data-act="edit" data-id="mty1ws744v5mi5">改</button><button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="mty1ws744v5mi5">删</button></div></td></tr></tbody>
       </table>
     </div>
     <div class="empty hidden" id="recEmpty" data-page-node-id="lcKxw6vwztSdN5F6dk7roA">
@@ -999,7 +1002,11 @@ var Store = (function () {
     if (typeof data.currentCode === 'string') state.currentCode = data.currentCode;
     if (Array.isArray(data.fundOrder)) state.fundOrder = data.fundOrder;
     if (data.fundPinned && typeof data.fundPinned === 'object') state.fundPinned = data.fundPinned;
-    if (data.fundSort && typeof data.fundSort === 'object') state.fundSort = data.fundSort;
+    if (data.fundSort && typeof data.fundSort === 'object') {
+      // 排序键只认 vsBuy / vsSell / mdd（旧版遗留的 'profit'、'dd' 均归一为手动模式）
+      var sk = data.fundSort.key;
+      state.fundSort = { key: (sk === 'vsBuy' || sk === 'vsSell' || sk === 'mdd') ? sk : '', dir: data.fundSort.dir === 'asc' ? 'asc' : 'desc' };
+    }
     if (typeof data.rev === 'number') state.rev = data.rev;
     return true;
   }
@@ -1314,8 +1321,9 @@ function enrichRecords(records, fund) {
   });
 
   var out = [];
-  var lastBuyPoint = null; // 上一「买入」的净值点（卖出点也用它来比较）
-  var cumShares = 0;       // 累计持有份额（买入 +，卖出 −）
+  var lastBuyPoint = null;  // 上一「买入」的净值点（买卖点都相对它比较）
+  var lastSellPoint = null; // 上一「卖出」的净值点（买卖点都相对它比较）
+  var cumShares = 0;        // 累计持有份额（买入 +，卖出 −）
 
   for (var i = 0; i < sorted.length; i++) {
     var r = sorted[i];
@@ -1339,6 +1347,7 @@ function enrichRecords(records, fund) {
       navIsExact: navPoint ? toDateStr(navPoint.ts) === r.date : false,
       shares: null,
       vsPrev: null,        // 相对上一次「买入」的涨跌幅 %（含分红修正）
+      vsPrevSell: null,    // 相对上一次「卖出」的涨跌幅 %（含分红修正）
       vsLatest: null,      // 仅买入：相对最新净值的涨跌幅 %（含分红修正）
       remainingShares: null,
       latestNav: last ? last.nav : null,
@@ -1360,6 +1369,14 @@ function enrichRecords(records, fund) {
     }
     if (type === 'buy' && navPoint) {
       lastBuyPoint = navPoint;
+    }
+
+    // 同口径：相对「上一次卖出价」比较
+    if (lastSellPoint && navPoint) {
+      item.vsPrevSell = adjReturnPct(lastSellPoint, navPoint);
+    }
+    if (type === 'sell' && navPoint) {
+      lastSellPoint = navPoint;
     }
 
     out.push(item);
@@ -1441,6 +1458,118 @@ function summarize(enriched) {
   };
 }
 
+/* ---------- 5.2b 相对「上一次操作点」的涨跌幅（列表 / 概览 / 图表共用口径） ---------- */
+
+/** 区间名（无上次买入/卖出记录时，用于标注「基准取哪个区间的首个交易日」） */
+function rangeLabel(range) {
+  var m = {
+    '30': '近1月', '90': '近3月', '180': '近6月', '365': '近1年',
+    '1095': '近3年', '1825': '近5年', '3650': '近10年', 'all': '成立以来'
+  };
+  return m[String(range)] || '所选区间';
+}
+
+/**
+ * 当前（最新净值）相对「最后一次买入点 / 最后一次卖出点」的涨跌幅（含分红修正）
+ * 返回 { vsBuy, vsSell, buyDate, sellDate }；该基金没有买入（或卖出）记录时为 null
+ */
+function latestVsLastAction(enriched) {
+  var buy = null, sell = null, latest = null;
+  for (var i = 0; i < enriched.length; i++) {
+    var it = enriched[i];
+    if (it.latestNav != null) latest = { nav: it.latestNav, ac: it.latestAc };
+    if (it.nav == null) continue;
+    if (it.type === 'sell') sell = it; else buy = it;
+  }
+  var out = { vsBuy: null, vsSell: null, buyDate: null, sellDate: null };
+  if (!latest) return out;
+  if (buy) {
+    out.vsBuy = adjReturnPct({ nav: buy.nav, ac: buy.ac }, latest);
+    out.buyDate = buy.navDate;
+  }
+  if (sell) {
+    out.vsSell = adjReturnPct({ nav: sell.nav, ac: sell.ac }, latest);
+    out.sellDate = sell.navDate;
+  }
+  return out;
+}
+
+/**
+ * 每个买卖点相对「上一次买入点 / 上一次卖出点」的涨跌幅（含分红修正）
+ * 没有上一次同类操作时，基准取当前所选区间的第一个净值点（base = 'range'）；
+ * 若基准点就是该点自身，记 base = 'self'（显示为「基准」）。
+ * 返回与 enriched 等长的数组：[{ buy, sell, buyBase, sellBase, buyBaseDate, sellBaseDate }]
+ */
+function compareMarkersToPrevActions(enriched, rangeFirst) {
+  var out = [];
+  var lastBuy = null, lastSell = null;
+
+  function cmp(cur, base) {
+    if (!cur || !base || cur.nav == null || base.nav == null) {
+      return { pct: null, base: 'none', baseDate: null };
+    }
+    if (cur.date && base.date && cur.date === base.date) {
+      return { pct: 0, base: 'self', baseDate: base.date };
+    }
+    return { pct: adjReturnPct(base, cur), base: base === rangeFirst ? 'range' : 'prev', baseDate: base.date };
+  }
+
+  for (var i = 0; i < enriched.length; i++) {
+    var it = enriched[i];
+    var cur = { nav: it.nav, ac: it.ac, date: it.navDate };
+    var b = cmp(cur, lastBuy || rangeFirst);
+    var s = cmp(cur, lastSell || rangeFirst);
+    out.push({
+      buy: b.pct, buyBase: b.base, buyBaseDate: b.baseDate,
+      sell: s.pct, sellBase: s.base, sellBaseDate: s.baseDate
+    });
+    if (it.nav != null) {
+      if (it.type === 'sell') lastSell = cur; else lastBuy = cur;
+    }
+  }
+  return out;
+}
+
+/**
+ * 逐日计算「该交易日相对上次买入点 / 上次卖出点」的涨跌幅（含分红修正）
+ * 基准为该日之前最近的一次同类操作；没有则取区间首个交易日。
+ * 返回 { 日期字符串: { buy, sell, buyBase, sellBase, buyBaseDate, sellBaseDate } }
+ */
+function computeVsActionsByDate(enriched, points) {
+  var map = {};
+  if (!points || !points.length) return map;
+  var first = { nav: points[0].nav, ac: points[0].ac, date: toDateStr(points[0].ts) };
+
+  var recs = [];
+  for (var i = 0; i < enriched.length; i++) {
+    var it = enriched[i];
+    if (it.nav == null || !it.navDate) continue;
+    recs.push({ ts: dateStrToTs(it.navDate), nav: it.nav, ac: it.ac, type: it.type, date: it.navDate });
+  }
+  recs.sort(function (a, b) { return a.ts - b.ts; });
+
+  var ptr = 0, lastBuy = null, lastSell = null;
+  for (var p = 0; p < points.length; p++) {
+    var pt = points[p];
+    while (ptr < recs.length && recs[ptr].ts < pt.ts) {
+      if (recs[ptr].type === 'sell') lastSell = recs[ptr]; else lastBuy = recs[ptr];
+      ptr++;
+    }
+    var d = toDateStr(pt.ts);
+    var b = lastBuy || first, s = lastSell || first;
+    var isFirst = (pt.ts === points[0].ts);
+    map[d] = {
+      buy: b ? adjReturnPct(b, pt) : null,
+      sell: s ? adjReturnPct(s, pt) : null,
+      buyBase: lastBuy ? 'prev' : (isFirst ? 'self' : 'range'),
+      sellBase: lastSell ? 'prev' : (isFirst ? 'self' : 'range'),
+      buyBaseDate: b ? b.date : null,
+      sellBaseDate: s ? s.date : null
+    };
+  }
+  return map;
+}
+
 /** 简单移动平均线：ts -> 均值（不足 n 个点时为 null），基于完整历史保证窗口左端正确 */
 function computeMA(points, n) {
   var map = {};
@@ -1453,6 +1582,105 @@ function computeMA(points, n) {
     map[points[i].ts] = (win.length >= n) ? (sum / n) : null;
   }
   return map;
+}
+
+/* ---------- 5.2c 图表标记标签的几何布置（纯函数，可单测） ---------- */
+
+/** 两矩形是否相交 */
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** 线段是否与矩形相交（Liang-Barsky 参数裁剪） */
+function segIntersectsRect(x1, y1, x2, y2, r) {
+  var t0 = 0, t1 = 1, dx = x2 - x1, dy = y2 - y1;
+  var p = [-dx, dx, -dy, dy];
+  var q = [x1 - r.x, r.x + r.w - x1, y1 - r.y, r.y + r.h - y1];
+  for (var i = 0; i < 4; i++) {
+    if (p[i] === 0) {
+      if (q[i] < 0) return false;
+    } else {
+      var t = q[i] / p[i];
+      if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+      else { if (t < t0) return false; if (t < t1) t1 = t; }
+    }
+  }
+  return true;
+}
+
+/** 点是否落在矩形内（含边界） */
+function pointInRect(p, r) {
+  return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+}
+
+/**
+ * 为买卖点标签挑一个不遮挡曲线、标记点、其他标签，也不越出绘图区的位置。
+ * 策略：四个象限 × 逐级增大的间距（10/16/24/34px），返回第一个「完全无遮挡」的候选；
+ * 全部被占时退化为「遮挡最少」的候选（保证总有输出）。
+ * blockPts：需避开的点 [{x,y}]（曲线采样点 + 全部标记点）；
+ * placed：已放置的标签框 [{x,y,w,h}]；bounds：绘图区 {left,right,top,bottom}。
+ * 返回 { x, y, side, gap }，(x, y) 为标签框左上角。
+ */
+function placeMarkerLabel(cx, cy, w, h, blockPts, placed, bounds) {
+  var gaps = [10, 16, 24, 34];
+  var sides = ['rt', 'rb', 'lt', 'lb'];
+
+  function boxAt(side, gap) {
+    return {
+      x: (side === 'rt' || side === 'rb') ? cx + gap : cx - gap - w,
+      y: (side === 'rt' || side === 'lt') ? cy - gap - h : cy + gap,
+      w: w, h: h
+    };
+  }
+  function badness(box) {
+    var s = 0, j, k;
+    if (box.x < bounds.left) s += 2;
+    if (box.x + w > bounds.right) s += 2;
+    if (box.y < bounds.top) s += 2;
+    if (box.y + h > bounds.bottom) s += 2;
+    for (j = 0; j < blockPts.length; j++) {
+      if (pointInRect(blockPts[j], box)) { s += 3; break; }
+    }
+    for (j = 0; j < blockPts.length - 1; j++) {
+      var a = blockPts[j], b = blockPts[j + 1];
+      if ((a.x < box.x && b.x < box.x) || (a.x > box.x + w && b.x > box.x + w)) continue;
+      if (segIntersectsRect(a.x, a.y, b.x, b.y, box)) { s += 3; break; }
+    }
+    for (k = 0; k < placed.length; k++) {
+      if (rectsOverlap(box, placed[k])) { s += 4; break; }
+    }
+    return s;
+  }
+
+  // 1) 逐级间距找「零遮挡」位置（同一间距下还允许向上/向下叠排）
+  for (var g = 0; g < gaps.length; g++) {
+    for (var i = 0; i < sides.length; i++) {
+      for (var row = 0; row < 3; row++) {
+        var box = boxAt(sides[i], gaps[g]);
+        if (row > 0) {
+          // 远离标记再叠一排，挤在一起的多个标签可以上下错开
+          if (sides[i] === 'rt' || sides[i] === 'lt') box.y -= row * (h + 6);
+          else box.y += row * (h + 6);
+        }
+        if (box.x < bounds.left || box.y < bounds.top ||
+            box.x + w > bounds.right || box.y + h > bounds.bottom) continue;
+        if (badness(box) === 0) return { x: box.x, y: box.y, side: sides[i], gap: gaps[g] };
+      }
+    }
+  }
+
+  // 2) 兜底：取扣分最少的候选（间距 10）
+  var bestSide = 'rt', bestScore = Infinity;
+  for (var b2 = 0; b2 < sides.length; b2++) {
+    var sc = badness(boxAt(sides[b2], 10));
+    if (sc < bestScore) { bestScore = sc; bestSide = sides[b2]; }
+  }
+  var fb = boxAt(bestSide, 10);
+  return {
+    x: Math.max(bounds.left, Math.min(fb.x, bounds.right - w)),
+    y: Math.max(bounds.top, Math.min(fb.y, bounds.bottom - h)),
+    side: bestSide, gap: 10
+  };
 }
 
 /** 按区间裁剪净值点 */
@@ -1674,17 +1902,20 @@ function normalizedFundOrder() {
   return order;
 }
 
-/** 单只基金指标：笔数 / 浮动盈亏% / 成立以来最大回撤%（取回撤序列最小值） */
+/** 单只基金指标：笔数 / 较前次买入% / 较前次卖出% / 成立以来最大回撤%（取回撤序列最小值） */
 function fundMetrics(code) {
   var fund = state.funds[code];
   var recs = [];
   for (var i = 0; i < state.records.length; i++) {
     if (state.records[i].code === code) recs.push(state.records[i]);
   }
-  var out = { count: recs.length, profit: null, mdd: null };
+  var out = { count: recs.length, vsBuy: null, vsSell: null, buyDate: null, sellDate: null, mdd: null };
   if (fund && fund.points && fund.points.length) {
-    var s = summarize(enrichRecords(recs, fund));
-    out.profit = s.profitRate;
+    var mv = latestVsLastAction(enrichRecords(recs, fund));
+    out.vsBuy = mv.vsBuy;
+    out.vsSell = mv.vsSell;
+    out.buyDate = mv.buyDate;
+    out.sellDate = mv.sellDate;
     var ddMap = computeDrawdownMap(fund.points);
     for (var ts in ddMap) {
       if (ddMap.hasOwnProperty(ts)) {
@@ -1710,8 +1941,8 @@ function fundDisplayList() {
     var metrics = {};
     for (var j = 0; j < rest.length; j++) metrics[rest[j]] = fundMetrics(rest[j]);
     rest.sort(function (a, b) {
-      var va = sort.key === 'profit' ? metrics[a].profit : metrics[a].mdd;
-      var vb = sort.key === 'profit' ? metrics[b].profit : metrics[b].mdd;
+      var va = metrics[a][sort.key];
+      var vb = metrics[b][sort.key];
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
@@ -1729,8 +1960,9 @@ function renderFundTable() {
   var list = fundDisplayList();
   if (cnt) cnt.textContent = list.length ? '共 ' + list.length + ' 只' : '';
   if (hint) {
+    var sortNames = { vsBuy: '相较于前次买入', vsSell: '相较于前次卖出', mdd: '最大回撤' };
     hint.textContent = state.fundSort.key
-      ? '按' + (state.fundSort.key === 'profit' ? '浮动盈亏' : '最大回撤') +
+      ? '按' + (sortNames[state.fundSort.key] || '数值') +
         (state.fundSort.dir === 'desc' ? '从大到小' : '从小到大') + '，再点表头切换 / 恢复拖拽'
       : '拖拽 ⋮ 调整顺序 · 点击表头按数值排序';
   }
@@ -1755,9 +1987,15 @@ function renderFundTable() {
     var isPinned = !!state.fundPinned[code];
     var rowCls = (isCur ? 'current ' : '') + (isPinned ? 'pinned' : '');
 
-    var profitHtml = m.profit == null
+    // 相较于前次买入 / 前次卖出：没有对应记录时留空
+    var vsBuyHtml = m.vsBuy == null
       ? '<span style="color:var(--text-faint)">—</span>'
-      : '<span class="' + pctClass(m.profit) + '" style="font-weight:600">' + fmtPct(m.profit) + '</span>';
+      : '<span class="' + pctClass(m.vsBuy) + '" style="font-weight:600" title="基准：' +
+        escapeHtml(m.buyDate || '') + ' 买入">' + fmtPct(m.vsBuy) + '</span>';
+    var vsSellHtml = m.vsSell == null
+      ? '<span style="color:var(--text-faint)">—</span>'
+      : '<span class="' + pctClass(m.vsSell) + '" style="font-weight:600" title="基准：' +
+        escapeHtml(m.sellDate || '') + ' 卖出">' + fmtPct(m.vsSell) + '</span>';
     var mddHtml = m.mdd == null
       ? '<span style="color:var(--text-faint)">—</span>'
       : '<span class="' + pctClass(m.mdd) + '" style="font-weight:600">' + fmtPct(m.mdd) + '</span>';
@@ -1774,7 +2012,8 @@ function renderFundTable() {
         '<td data-label="基金"><span class="f-name" data-act="switch" title="切换到该基金">' + escapeHtml(name) + '</span>' +
           '<span class="f-code">' + escapeHtml(code) + '</span></td>' +
         '<td data-label="笔数" class="num">' + m.count + '</td>' +
-        '<td data-label="浮动盈亏" class="num">' + profitHtml + '</td>' +
+        '<td data-label="相较于前次买入" class="num">' + vsBuyHtml + '</td>' +
+        '<td data-label="相较于前次卖出" class="num">' + vsSellHtml + '</td>' +
         '<td data-label="最大回撤" class="num">' + mddHtml + '</td>' +
         '<td data-label="操作" class="num"><div class="rec-actions">' +
           '<button class="btn btn-sm btn-ghost' + (isPinned ? ' pin-star' : '') + '" data-act="pin" title="' +
@@ -1782,6 +2021,10 @@ function renderFundTable() {
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="' + (isPinned ? 'currentColor' : 'none') +
             '" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>' +
           '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="source" title="在天天基金（数据源）查看该基金详情，新标签页打开">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+            '详情</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="update" title="刷新净值（并升级为成立以来全部历史）">更新</button>' +
           '<button class="btn btn-sm btn-ghost btn-danger" data-act="del" title="删除该基金及其全部记录">删</button>' +
         '</div></td>' +
@@ -1822,6 +2065,22 @@ function cycleFundSort(key) {
   else if (s.dir === 'desc') { s.dir = 'asc'; }
   else { s.key = ''; s.dir = 'desc'; }
   Store.save().then(function () { refreshAll(); });
+}
+
+/* ---------- 5.3c 数据源（天天基金）详情页跳转 ---------- */
+
+/** 该基金在数据源站点的详情页地址（基金代码为 6 位数字，仍做一次编码兜底） */
+function fundDetailUrl(code) {
+  return 'https://fund.eastmoney.com/' + encodeURIComponent(String(code)) + '.html';
+}
+
+/** 在新标签页打开数据源详情页；被浏览器拦截时退化为当前页跳转 */
+function openFundDetail(code) {
+  if (!code) return;
+  var url = fundDetailUrl(code);
+  var win = window.open(url, '_blank');
+  if (!win) { window.location.href = url; return; }
+  try { win.opener = null; } catch (err) {}
 }
 
 function deleteFund(code) {
@@ -1882,6 +2141,12 @@ function renderChart() {
 
   // --- 最大回撤：按「当前所选时间段内」的最高点计算 ---
   var ddMap = computeDrawdownMap(points);
+
+  // --- 每个买卖点相对「上次买入点 / 上次卖出点」的涨跌幅（无上次操作时以区间首点为基准） ---
+  var rangeName = rangeLabel(state.range);
+  var cmpList = compareMarkersToPrevActions(enriched, {
+    nav: points[0].nav, ac: points[0].ac, date: toDateStr(points[0].ts)
+  });
 
   // --- 均线窗口基于完整历史，保证可见区间左端也有值 ---
   var ma15Map = computeMA(fund.points, 15);
@@ -1970,9 +2235,31 @@ function renderChart() {
     visibleIds[toDateStr(points[m].ts)] = true;
   }
 
-  // --- 买入/卖出点标记 ---
+  // --- 买入/卖出点标记（两遍：先画点并准备文案，再统一布置标签） ---
   var SELL_COLOR = '#ff9f43';
+  var BUY_COLOR = '#ff5b5b';
   var markers = [];
+  var linePts = [];        // 曲线采样点（标签避让用）
+  for (var lp = 0; lp < points.length; lp++) {
+    linePts.push({ x: X(points[lp].ts), y: Y(points[lp].nav) });
+  }
+
+  /** 标记标签单行文案：买/卖 + 涨跌幅；基准非上次同类操作时注明区间 */
+  function cmpLineText(tag, pct, base) {
+    if (base === 'self') return tag + ' 基准';
+    var pctTxt = (pct == null) ? '—' : fmtPct(pct, 1);
+    var prefix = (base === 'range') ? (tag + '(' + rangeName + ')') : tag;
+    return prefix + ' ' + pctTxt;
+  }
+
+  function cmpLineColor(pct, base) {
+    if (base === 'self' || pct == null) return '#8d95a8';
+    if (pct > 0) return '#ff5b5b';
+    if (pct < 0) return '#26c281';
+    return '#8d95a8';
+  }
+
+  // 第一遍：画点 + 准备标签文案与尺寸
   for (var n = 0; n < enriched.length; n++) {
     var it = enriched[n];
     if (it.nav == null || !it.navDate) continue;
@@ -1981,12 +2268,9 @@ function renderChart() {
     var cx = X(dateStrToTs(it.navDate));
     var cy = Y(it.nav);
     var isSell = (it.type === 'sell');
+    var color = isSell ? SELL_COLOR : BUY_COLOR;
 
-    var isBase = (!isSell && it.vsPrev == null);
-    var color = isSell ? SELL_COLOR
-      : (isBase ? '#8d95a8' : (it.vsPrev > 0 ? '#ff5b5b' : (it.vsPrev < 0 ? '#26c281' : '#8d95a8')));
-
-    // 买入 = 圆点，卖出 = 橙色菱形
+    // 买入 = 红色圆点，卖出 = 橙色菱形（涨跌语义由标签上的两行文字承担）
     if (isSell) {
       parts.push('<rect x="' + (cx - 5.5).toFixed(1) + '" y="' + (cy - 5.5).toFixed(1) +
                  '" width="11" height="11" transform="rotate(45 ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')' +
@@ -1996,22 +2280,53 @@ function renderChart() {
                  '" stroke="#0f1116" stroke-width="2.5" data-marker="' + n + '"/>');
     }
 
-    // 标签：相对上一次买入的涨跌幅（卖出点同样标注）
-    var label = isBase ? '基准' : fmtPct(it.vsPrev, 1);
-    var labelW = label.length * 7.2 + 14;
-    var anchor = cx + labelW + 4 > W - padR ? 'end' : 'start';
-    var lx = anchor === 'end' ? cx - 11 : cx + 11;
-    var ly = cy - 12;
+    var cmp = cmpList[n] || { buy: null, sell: null, buyBase: 'none', sellBase: 'none' };
+    var t1 = cmpLineText('买', cmp.buy, cmp.buyBase);
+    var t2 = cmpLineText('卖', cmp.sell, cmp.sellBase);
+    markers.push({
+      idx: n, x: cx, y: cy, item: it, color: color, cmp: cmp,
+      t1: t1, t2: t2,
+      boxW: Math.max(t1.length * 6.6 + 12, t2.length * 6.6 + 12, 46),
+      boxH: 30
+    });
+  }
+
+  // 第二遍：统一布置标签（避开曲线、全部标记点与已放置的标签）
+  var markerDots = [];
+  for (var md = 0; md < markers.length; md++) markerDots.push({ x: markers[md].x, y: markers[md].y });
+  var avoidPts = linePts.concat(markerDots);
+  var placedBoxes = [];
+  for (var mi = 0; mi < markers.length; mi++) {
+    var mk = markers[mi];
+    var boxW = mk.boxW, boxH = mk.boxH;
+    var pos = placeMarkerLabel(mk.x, mk.y, boxW, boxH, avoidPts, placedBoxes,
+      { left: padL, right: W - padR, top: padT, bottom: H - padB });
+    var bx = pos.x, by = pos.y;
+    var anchorEnd = (pos.side === 'lt' || pos.side === 'lb');
+
+    // 引导线：从标记点外缘连到标签框离它最近的角，明确标签归属
+    var ltx = (pos.side === 'lt' || pos.side === 'lb') ? bx + boxW : bx;
+    var lty = (pos.side === 'rt' || pos.side === 'lt') ? by + boxH : by;
+    var ldx = ltx - mk.x, ldy = lty - mk.y;
+    var llen = Math.sqrt(ldx * ldx + ldy * ldy) || 1;
+    var lstart = 9; // 标记点半径+描边，起点落在点外缘，避免线压住点
+    parts.push('<line x1="' + (mk.x + ldx / llen * lstart).toFixed(1) + '" y1="' + (mk.y + ldy / llen * lstart).toFixed(1) +
+               '" x2="' + ltx.toFixed(1) + '" y2="' + lty.toFixed(1) +
+               '" stroke="' + mk.color + '" stroke-opacity="0.45" stroke-width="1" stroke-linecap="round"/>');
+
+    var scan = '<text x="' + (anchorEnd ? bx + boxW - 6 : bx + 6) + '" y="' + (by + 13).toFixed(1) +
+               '" fill="' + cmpLineColor(mk.cmp.buy, mk.cmp.buyBase) + '" font-size="11" font-weight="600" ' +
+               'text-anchor="' + (anchorEnd ? 'end' : 'start') + '">' + mk.t1 + '</text>';
+    scan += '<text x="' + (anchorEnd ? bx + boxW - 6 : bx + 6) + '" y="' + (by + 25).toFixed(1) +
+            '" fill="' + cmpLineColor(mk.cmp.sell, mk.cmp.sellBase) + '" font-size="11" font-weight="600" ' +
+            'text-anchor="' + (anchorEnd ? 'end' : 'start') + '">' + mk.t2 + '</text>';
 
     parts.push('<g pointer-events="none">' +
-               '<rect x="' + (anchor === 'end' ? lx - labelW : lx) + '" y="' + (ly - 13) +
-               '" width="' + labelW + '" height="19" rx="5" fill="' + color +
-               '" fill-opacity="' + (isBase ? '0.22' : '0.9') + '"/>' +
-               '<text x="' + (anchor === 'end' ? lx - labelW / 2 : lx + labelW / 2) + '" y="' + (ly + 1) +
-               '" fill="' + (isBase ? '#8d95a8' : '#fff') + '" font-size="11.5" font-weight="600" ' +
-               'text-anchor="middle">' + label + '</text></g>');
+               '<rect x="' + bx.toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + boxW.toFixed(1) +
+               '" height="' + boxH + '" rx="6" fill="#12151d" fill-opacity="0.86" stroke="' + mk.color +
+               '" stroke-opacity="0.55" stroke-width="1"/>' + scan + '</g>');
 
-    markers.push({ idx: n, x: cx, y: cy, item: it });
+    placedBoxes.push({ x: bx, y: by, w: boxW, h: boxH });
   }
 
   // --- 悬停十字准线（位置由鼠标事件更新） ---
@@ -2037,6 +2352,8 @@ function renderChart() {
     padL: padL, padR: padR, padT: padT, padB: padB,
     plotW: plotW, plotH: plotH,
     dd: ddByDate, buy: buyByDate,
+    cmp: computeVsActionsByDate(enriched, points),
+    rangeName: rangeName,
     ma15: ma15Map, ma60: ma60Map
   };
   ensureChartHover(svg);
@@ -2046,23 +2363,21 @@ function renderChart() {
   legendHtml += '<span class="legend-item"><span class="legend-line"></span>基金净值</span>';
   legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#ffb020"></span>15日均线</span>';
   legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#b57bff"></span>60日均线</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff5b5b"></span>买入点（较上次上涨）</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#26c281"></span>买入点（较上次下跌）</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#8d95a8"></span>首次买入（基准）</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff9f43;border-radius:2px;transform:rotate(45deg)"></span>卖出点（较上次买入）</span>';
-  // 「最近一次买入」要落到买入记录上（最后一条记录可能是卖出）
-  var lastBuyIt = null;
-  for (var lbf = enriched.length - 1; lbf >= 0; lbf--) {
-    if (enriched[lbf].type === 'buy') { lastBuyIt = enriched[lbf]; break; }
-  }
-  if (lastBuyIt && lastBuyIt.vsLatest != null) {
-    legendHtml += '<span class="legend-item">' +
-      '最新净值相对最近一次买入：<span class="badge ' + badgeClass(lastBuyIt.vsLatest) + '">' +
-      fmtPct(lastBuyIt.vsLatest) + '</span></span>';
-  }
-  // 口径披露：涨跌幅按含分红的复权口径，份额按单位净值折算
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff5b5b"></span>买入点</span>';
+  legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff9f43;border-radius:2px;transform:rotate(45deg)"></span>卖出点</span>';
+  // 当前净值相对「前次买入 / 前次卖出」的涨跌幅（无记录时留空）
+  var latestCmp = latestVsLastAction(enriched);
+  legendHtml += '<span class="legend-item">较前次买入：' +
+    (latestCmp.vsBuy == null ? '<span class="badge badge-base">—</span>'
+      : '<span class="badge ' + badgeClass(latestCmp.vsBuy) + '">' + fmtPct(latestCmp.vsBuy) + '</span>') +
+    ' · 较前次卖出：' +
+    (latestCmp.vsSell == null ? '<span class="badge badge-base">—</span>'
+      : '<span class="badge ' + badgeClass(latestCmp.vsSell) + '">' + fmtPct(latestCmp.vsSell) + '</span>') +
+    '</span>';
+  // 口径披露：涨跌幅按含分红的复权口径，份额按单位净值折算；无上次操作时基准为区间首日
   legendHtml += '<span class="legend-item" style="margin-left:auto;color:var(--text-faint);font-size:12px">' +
-                '涨跌幅含分红（累计净值口径）· 份额按单位净值折算</span>';
+                '涨跌幅含分红（累计净值口径）· 无上次买入/卖出记录时，基准取所选区间「' + escapeHtml(rangeName) +
+                '」的首个交易日 · 份额按单位净值折算</span>';
   $('chartLegend').innerHTML = legendHtml;
 }
 
@@ -2075,16 +2390,16 @@ function renderStats() {
   var recs = state.records.filter(function (r) { return r.code === state.currentCode; });
   var en = fund ? enrichRecords(recs, fund) : [];
   var s = summarize(en);
+  var mv = latestVsLastAction(en);
 
   if (!fund || en.length === 0) {
     grid.innerHTML =
       card('操作笔数', s.count + ' 笔', '') +
       card('投入本金', '¥' + fmtMoney(s.totalAmount), '') +
-      card('浮动盈亏', '<span class="val-flat">—</span>', '需加载净值数据');
+      card('相较于前次买入', '<span class="val-flat">—</span>', '需加载净值数据') +
+      card('相较于前次卖出', '<span class="val-flat">—</span>', '需加载净值数据');
     return;
   }
-
-  var profitCls = pctClass(s.profitRate);
 
   var opNote = '买 ' + s.buyCount + ' · 卖 ' + s.sellCount;
   if (s.validVsPrev > 0) opNote += ' · ' + s.cheaperCount + ' 次买在更低位';
@@ -2093,11 +2408,16 @@ function renderStats() {
     card('操作笔数', s.count + ' 笔', opNote) +
     card('投入本金', '¥' + fmtMoney(s.totalAmount),
          s.sellAmount > 0 ? ('卖出回款 ¥' + fmtMoney(s.sellAmount)) : '') +
-    card('浮动盈亏',
-         s.profitRate == null ? '<span class="val-flat">—</span>'
-           : '<span class="' + profitCls + '">' + fmtPct(s.profitRate) + '</span>',
-         s.profitRate == null ? '需加载净值数据'
-           : (s.dividendAdjusted ? '相对投入本金 · 已计入现金分红' : '相对投入本金'));
+    card('相较于前次买入',
+         mv.vsBuy == null ? '<span class="val-flat">—</span>'
+           : '<span class="' + pctClass(mv.vsBuy) + '">' + fmtPct(mv.vsBuy) + '</span>',
+         mv.vsBuy == null ? '无买入记录'
+           : ('相对 ' + mv.buyDate + ' 买入价' + (s.dividendAdjusted ? ' · 含分红' : ''))) +
+    card('相较于前次卖出',
+         mv.vsSell == null ? '<span class="val-flat">—</span>'
+           : '<span class="' + pctClass(mv.vsSell) + '">' + fmtPct(mv.vsSell) + '</span>',
+         mv.vsSell == null ? '无卖出记录'
+           : ('相对 ' + mv.sellDate + ' 卖出价' + (s.dividendAdjusted ? ' · 含分红' : '')));
 }
 
 function card(label, value, note) {
@@ -2244,16 +2564,17 @@ function renderRecords() {
       ? '<span class="badge badge-sell">卖出</span>'
       : '<span class="badge badge-buy">买入</span>';
 
+    // 涨跌幅配色与买入行一致：涨红跌绿（类型列的橙色徽章仅用于标识「卖出」）
     var vsPrevHtml = it.vsPrev == null
       ? (isSellRow ? '<span style="color:var(--text-faint)">—</span>'
                    : '<span class="badge badge-base">基准</span>')
-      : (isSellRow
-          ? '<span class="badge badge-sell">' + fmtPct(it.vsPrev) + '</span>'
-          : '<span class="badge ' + badgeClass(it.vsPrev) + '">' + fmtPct(it.vsPrev) + '</span>');
+      : '<span class="badge ' + badgeClass(it.vsPrev) + '">' + fmtPct(it.vsPrev) + '</span>';
 
-    var vsLatestHtml = (it.vsLatest == null || isSellRow)
-      ? '<span style="color:var(--text-faint)">—</span>'
-      : '<span class="' + pctClass(it.vsLatest) + '" style="font-weight:600">' + fmtPct(it.vsLatest) + '</span>';
+    // 较上次卖出：与「较上次买入」同口径，首笔卖出为基准
+    var vsPrevSellHtml = it.vsPrevSell == null
+      ? (isSellRow ? '<span class="badge badge-base">基准</span>'
+                   : '<span style="color:var(--text-faint)">—</span>')
+      : '<span class="badge ' + badgeClass(it.vsPrevSell) + '">' + fmtPct(it.vsPrevSell) + '</span>';
 
     var navCell = it.nav == null
       ? '<span style="color:var(--text-faint)">待加载</span>'
@@ -2271,7 +2592,7 @@ function renderRecords() {
         '<td data-label="份额" class="num">' + sharesCell + '</td>' +
         '<td data-label="备注">' + noteCell + '</td>' +
         '<td data-label="较上次买入" class="num">' + vsPrevHtml + '</td>' +
-        '<td data-label="持有至最新" class="num">' + vsLatestHtml + '</td>' +
+        '<td data-label="较上次卖出" class="num">' + vsPrevSellHtml + '</td>' +
         '<td data-label="操作" class="num"><div class="rec-actions">' +
           '<button class="btn btn-sm btn-ghost" data-act="edit" data-id="' + it.id + '">改</button>' +
           '<button class="btn btn-sm btn-ghost btn-danger" data-act="del" data-id="' + it.id + '">删</button>' +
@@ -2478,12 +2799,29 @@ function ensureChartHover(svg) {
       (ma15v == null ? '—' : fmt(ma15v, 4)) + '</span></div>' +
       '<div class="popup-row"><span class="popup-key" style="color:#b57bff">60日均线</span><span class="popup-val">' +
       (ma60v == null ? '—' : fmt(ma60v, 4)) + '</span></div>';
-    var vsPrevRow = (item && item.vsPrev == null)
-      ? '<div class="popup-row"><span class="popup-key">较上次买入</span><span class="popup-val" style="color:#5f6779">首次买入</span></div>'
-      : (item
-          ? '<div class="popup-row"><span class="popup-key">较上次买入</span><span class="popup-val ' +
-            pctClass(item.vsPrev) + '">' + fmtPct(item.vsPrev) + '</span></div>'
-          : '');
+    var vsPrevRow = '';
+
+    // 相对「上次买入 / 上次卖出」的两行（无同类操作时基准为所选区间首个交易日）
+    (function () {
+      var cc = (svg.__hoverCtx.cmp || {})[dateStr];
+      if (!cc) return;
+      var rnText = (svg.__hoverCtx && svg.__hoverCtx.rangeName) || '所选区间';
+      function row(key, pct, base, baseDate) {
+        var val = (base === 'self') ? '<span class="popup-val" style="color:#5f6779">基准</span>'
+          : '<span class="popup-val ' + pctClass(pct) + '">' + (pct == null ? '—' : fmtPct(pct)) + '</span>';
+        var note = (base === 'range')
+          ? '<div class="popup-row" style="margin-top:-2px"><span class="popup-key" style="color:#5f6779">基准</span>' +
+            '<span class="popup-val" style="color:#5f6779">' + escapeHtml(rnText) + '首日 ' +
+            escapeHtml(baseDate || '') + '</span></div>'
+          : '';
+        return '<div class="popup-row"><span class="popup-key">' + key + '</span>' + val + '</div>' + note;
+      }
+      vsPrevRow =
+        '<div style="margin-top:5px;padding-top:5px;border-top:1px solid #2a3040">' +
+        row('较上次买入', cc.buy, cc.buyBase, cc.buyBaseDate) +
+        row('较上次卖出', cc.sell, cc.sellBase, cc.sellBaseDate) +
+        '</div>';
+    })();
 
     if (item && item.type === 'sell') {
       // 卖出点
@@ -2518,7 +2856,7 @@ function ensureChartHover(svg) {
         '<div class="popup-row"><span class="popup-key">单位净值</span><span class="popup-val">' + fmt(pt.nav, 4) + '</span></div>' +
         '<div class="popup-row"><span class="popup-key">较昨日</span><span class="popup-val ' + pctClass(pt.daily) + '">' +
         (pt.daily == null ? '—' : fmtPct(pt.daily)) + '</span></div>' +
-        '<div class="popup-row"><span class="popup-key">最大回撤</span>' + ddVal + '</div>' + maRows;
+        '<div class="popup-row"><span class="popup-key">最大回撤</span>' + ddVal + '</div>' + maRows + vsPrevRow;
       showPopup(h2, clientX, clientY);
     }
   }
@@ -3032,6 +3370,8 @@ function bindEvents() {
         }
       } else if (act === 'pin') {
         togglePinFund(code);
+      } else if (act === 'source') {
+        openFundDetail(code);
       } else if (act === 'del') {
         deleteFund(code);
       } else if (act === 'update') {

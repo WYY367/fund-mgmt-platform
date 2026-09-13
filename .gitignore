@@ -5,6 +5,9 @@
 .smoke/tmp-server/
 .smoke/tmp-*.log
 
+# 本地临时产物（工作空间内的跑测脚本与日志，用完即删）
+.wb-*
+
 # 依赖与系统文件
 node_modules/
 .DS_Store

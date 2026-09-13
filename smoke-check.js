@@ -358,7 +358,9 @@ ok('图表已紧凑化（viewBox 900x320）', /id="chartSvg" viewBox="0 0 900 32
 ok('存在悬停十字准线交互', /function\s+ensureChartHover\s*\(/.test(html) && /id="xhair"/.test(html));
 ok('旧 bindChartEvents 已清理', html.indexOf('bindChartEvents') === -1);
 ok('已移除持有市值卡片', !card_label_re.test(html));
-ok('浮动盈亏卡片只显示百分比', /card\('浮动盈亏',\s*\n?\s*s\.profitRate == null/.test(html.replace(/\r/g, '')));
+ok('概览卡片：较前次买入 / 较前次卖出 各一张',
+   /card\('相较于前次买入'/.test(html) && /card\('相较于前次卖出'/.test(html));
+ok('概览不再显示总体浮动盈亏', !/card\('浮动盈亏'/.test(html));
 
 // 最大回撤计算逻辑重放
 if (sandbox.computeDrawdownMap) {
@@ -419,7 +421,9 @@ if (sandbox.computeDrawdownMap) {
    13. 迭代 v1.2：基金表格 / 全部历史 / 批量管理
    ============================================================ */
 console.log('\n【迭代 v1.2】基金表格 / 全部历史 / 批量管理');
-ok('表格列：浮动盈亏与最大回撤可排序', /data-sort="profit"/.test(html) && /data-sort="dd"/.test(html));
+ok('表格列：较前次买入 / 较前次卖出 / 最大回撤可排序',
+   /data-sort="vsBuy"/.test(html) && /data-sort="vsSell"/.test(html) && /data-sort="mdd"/.test(html));
+ok('旧列「浮动盈亏」已从基金表格移除', !/data-sort="profit"/.test(html));
 ok('排序循环（降序→升序→手动）', /function\s+cycleFundSort\s*\(/.test(html));
 ok('置顶功能', /function\s+togglePinFund\s*\(/.test(html));
 ok('删除整只基金（含确认）', /function\s+deleteFund\s*\(/.test(html));
@@ -457,7 +461,10 @@ ok('图表回撤按所选区间计算', /computeDrawdownMap\(points\)/.test(html
 ok('存在 MA 计算函数（15/60 日）', /function computeMA\(points, n\)/.test(html) &&
    /computeMA\(fund\.points, 15\)/.test(html) && /computeMA\(fund\.points, 60\)/.test(html));
 ok('均线为虚线且配色区分', /stroke="#ffb020"[^>]*stroke-dasharray/.test(html) && /stroke="#b57bff"[^>]*stroke-dasharray/.test(html));
-ok('图例含均线与卖出点', /15日均线/.test(html) && /60日均线/.test(html) && /卖出点（较上次买入）/.test(html));
+ok('图例含均线与卖出点', /15日均线/.test(html) && /60日均线/.test(html) && /<\/span>卖出点</.test(html));
+ok('图例中「买入点」只有一条', /<span class="legend-dot" style="background:#ff5b5b"><\/span>买入点</.test(html) &&
+   (html.match(/background:#ff5b5b"><\/span>买入点</g) || []).length === 1);
+ok('图例去掉括号说明', !/买入点（/.test(html) && !/卖出点（/.test(html));
 ok('悬停浮层显示均线值', /ma15: ma15Map/.test(html) && /15日均线/.test(html));
 
 /* ============================================================
@@ -546,6 +553,217 @@ if (sandbox.enrichRecords && sandbox.summarize) {
        { id: 's1', code: 'X', type: 'buy', date: '2026-01-01', amount: 1000, createdAt: 1 },
        { id: 's2', code: 'X', type: 'sell', date: '2026-01-05', amount: 300, createdAt: 2 }
      ], { points: lPts })[1].vsPrev - 20) < 1e-9);
+}
+
+/* ============================================================
+   16. 迭代 v1.5：数据源详情页跳转（天天基金）
+   ============================================================ */
+console.log('\n【迭代 v1.5】数据源详情页跳转');
+ok('基金表格行含「详情」按钮', /data-act="source"/.test(html));
+ok('存在 fundDetailUrl 生成数据源地址', /function\s+fundDetailUrl\s*\(/.test(html));
+ok('存在 openFundDetail（新标签页打开）',
+   /function\s+openFundDetail\s*\(/.test(html) && /window\.open\(url, '_blank'\)/.test(html));
+ok('详情地址指向数据源站点（fund.eastmoney.com/{code}.html）',
+   /'https:\/\/fund\.eastmoney\.com\/'\s*\+\s*encodeURIComponent\(String\(code\)\)/.test(html));
+ok('详情按钮走 fundBody 事件委托（act === source）',
+   /act === 'source'[\s\S]{0,60}openFundDetail\(code\)/.test(html));
+ok('出站跳转未引入任何外部资源（脚本/样式/图片仍全内联）',
+   !/<script[^>]+src=/i.test(html) && !/<img[^>]+src\s*=\s*["']https?:/i.test(html));
+
+{
+  const urlFn = extract('fundDetailUrl');
+  ok('fundDetailUrl 可独立执行', !!urlFn);
+  if (urlFn) {
+    try {
+      const makeUrl = new Function(urlFn + '\nreturn fundDetailUrl;')();
+      ok('fundDetailUrl(110022) 正确',
+         makeUrl('110022') === 'https://fund.eastmoney.com/110022.html', makeUrl('110022'));
+    } catch (e) {
+      ok('fundDetailUrl(110022) 正确', false, e.message);
+    }
+  }
+}
+
+/* ============================================================
+   17. 迭代 v1.6：拖拽排序修复（残留样式压制原生拖拽）
+   ============================================================ */
+console.log('\n【迭代 v1.6】拖拽排序修复');
+ok('已清除设计器残留样式（__dm_no_drag_style__）', html.indexOf('__dm_no_drag_style__') === -1);
+ok('全页无 -webkit-user-drag: none（会压制 draggable=true）',
+   !/-webkit-user-drag\s*:\s*none/i.test(html.replace(/\/\*[\s\S]*?\*\//g, '')));
+ok('拖拽行显式声明可拖拽（-webkit-user-drag: element）',
+   /\.funds tr\[draggable="true"\][^{]*\{[^}]*-webkit-user-drag:\s*element/.test(html));
+ok('拖拽行仍为手动排序模式（draggable="true"）', /function\s+moveFund\s*\(/.test(html));
+ok('拖拽手柄仅在手动模式渲染',
+   /manual \? '<span class="drag-handle"/.test(html));
+
+/* ============================================================
+   18. 迭代 v2.2：较前次买入 / 较前次卖出 口径
+   ============================================================ */
+console.log('\n【迭代 v2.2】较前次买入 / 较前次卖出');
+ok('存在 latestVsLastAction（列表/概览口径）', /function\s+latestVsLastAction\s*\(/.test(html));
+ok('列表无买入/卖出记录时留空',
+   /m\.vsBuy == null[\s\S]{0,160}text-faint/.test(html) && /m\.vsSell == null[\s\S]{0,160}text-faint/.test(html));
+ok('存在 compareMarkersToPrevActions（标记口径）', /function\s+compareMarkersToPrevActions\s*\(/.test(html));
+ok('存在 computeVsActionsByDate（悬停口径）', /function\s+computeVsActionsByDate\s*\(/.test(html));
+ok('存在区间名映射 rangeLabel', /function\s+rangeLabel\s*\(/.test(html) && /近10年/.test(html));
+ok('无上次操作时基准取区间首点并标注区间名',
+   /base === rangeFirst \? 'range' : 'prev'/.test(html) && /rangeLabel\(state\.range\)/.test(html));
+ok('图表标签为两行（买 / 卖 各一行）', /cmpLineText\('买'/.test(html) && /cmpLineText\('卖'/.test(html));
+ok('买卖点颜色固定（买入红 / 卖出橙）', /var BUY_COLOR = '#ff5b5b'/.test(html) && /var SELL_COLOR = '#ff9f43'/.test(html));
+ok('旧排序键载入时归一（只认 vsBuy / vsSell / mdd）',
+   /sk === 'vsBuy' \|\| sk === 'vsSell' \|\| sk === 'mdd'/.test(html));
+ok('记录表新增「较上次卖出」列',
+   />较上次卖出<\/th>/.test(html) && /data-label="较上次卖出"/.test(html));
+ok('标签几何函数齐备',
+   /function\s+rectsOverlap\s*\(/.test(html) &&
+   /function\s+segIntersectsRect\s*\(/.test(html) &&
+   /function\s+placeMarkerLabel\s*\(/.test(html));
+ok('渲染层用 placeMarkerLabel 统一布置标签并记录已放框',
+   /placeMarkerLabel\(mk\.x, mk\.y, boxW, boxH, avoidPts, placedBoxes/.test(html) &&
+   /placedBoxes\.push\(/.test(html));
+
+{
+  const geoSrc = [extract('rectsOverlap'), extract('pointInRect'), extract('segIntersectsRect'),
+                  extract('placeMarkerLabel')].filter(Boolean).join('\n');
+  let geo = null;
+  try {
+    geo = new Function(geoSrc + '\nreturn { rectsOverlap, pointInRect, segIntersectsRect, placeMarkerLabel };')();
+    ok('标签几何函数可独立执行', true);
+  } catch (e) {
+    ok('标签几何函数可独立执行', false, e.message);
+  }
+  if (geo) {
+    const R = { x: 0, y: 0, w: 10, h: 10 };
+    ok('线段矩形相交：横穿=true', geo.segIntersectsRect(-5, 5, 15, 5, R) === true);
+    ok('线段矩形相交：外侧=false', geo.segIntersectsRect(-5, 20, 15, 20, R) === false);
+    ok('线段矩形相交：内含=true', geo.segIntersectsRect(2, 2, 8, 8, R) === true);
+    ok('线段矩形相交：竖穿=true', geo.segIntersectsRect(5, -5, 5, 15, R) === true);
+    ok('线段矩形相交：擦边不入=false', geo.segIntersectsRect(20, 5, 30, 5, R) === false);
+    ok('点在矩形内判定',
+       geo.pointInRect({ x: 0, y: 0 }, R) === true && geo.pointInRect({ x: 11, y: 5 }, R) === false);
+
+    const B = { left: 0, right: 900, top: 0, bottom: 320 };
+
+    // 上行曲线（标记恰在折点）：右上候选压线 → 应回避到下方
+    const line = [{ x: 350, y: 200 }, { x: 450, y: 100 }, { x: 550, y: 0 }];
+    const p1 = geo.placeMarkerLabel(450, 100, 70, 30, line, [], B);
+    ok('标签自动避开曲线（不压上行线）', p1.side === 'rb' || p1.side === 'lb', JSON.stringify(p1));
+    const box1 = { x: p1.x, y: p1.y, w: 70, h: 30 };
+    ok('选中位置的框不与曲线相交',
+       !geo.segIntersectsRect(350, 200, 450, 100, box1) && !geo.segIntersectsRect(450, 100, 550, 0, box1),
+       JSON.stringify(box1));
+
+    // 已放标签占住下方 → 换到不相交的位置
+    const occupied = [{ x: 460, y: 110, w: 70, h: 30 }];
+    const p2 = geo.placeMarkerLabel(450, 100, 70, 30, line, occupied, B);
+    ok('标签之间互不遮挡',
+       !geo.rectsOverlap({ x: p2.x, y: p2.y, w: 70, h: 30 }, occupied[0]), JSON.stringify(p2));
+
+    // 四象限在 10px 间距全被占（上下两条横线）→ 自动换位/增大间距避让
+    const dense = [];
+    for (let x = 300; x <= 600; x += 10) { dense.push({ x: x, y: 85 }); dense.push({ x: x, y: 115 }); }
+    const p3 = geo.placeMarkerLabel(450, 100, 70, 30, dense, [], B);
+    ok('四周被占时自动换位避让（不落在默认位）', !(p3.x === 460 && p3.y === 61), JSON.stringify(p3));
+    ok('换位后的框不含任何需避开的点',
+       !dense.some((pt) => geo.pointInRect(pt, { x: p3.x, y: p3.y, w: 70, h: 30 })), JSON.stringify(p3));
+
+    // 贴近右缘 → 放到左侧，且坐标夹在绘图区内
+    const p4 = geo.placeMarkerLabel(870, 160, 70, 30, [], [], { left: 62, right: 874, top: 24, bottom: 280 });
+    ok('贴近右缘时标签放到左侧', p4.side === 'lt' || p4.side === 'lb', JSON.stringify(p4));
+    ok('标签坐标始终夹在绘图区内',
+       p4.x >= 62 && p4.x + 70 <= 874 && p4.y >= 24 && p4.y + 30 <= 280, JSON.stringify(p4));
+
+    // 相邻标记点也要避开
+    const dots = [{ x: 460, y: 90 }, { x: 470, y: 80 }];
+    const p5 = geo.placeMarkerLabel(450, 100, 70, 30, dots, [], B);
+    ok('标签不压相邻的标记点',
+       !dots.some((pt) => geo.pointInRect(pt, { x: p5.x, y: p5.y, w: 70, h: 30 })), JSON.stringify(p5));
+  }
+
+  if (sandbox.enrichRecords) {
+    const d5 = (s) => new Date(s + 'T00:00:00').getTime();
+    const pts5 = [
+      { ts: d5('2026-01-01'), nav: 1.0 },
+      { ts: d5('2026-01-05'), nav: 1.1 },
+      { ts: d5('2026-01-10'), nav: 1.2 },
+      { ts: d5('2026-01-15'), nav: 0.9 }
+    ];
+    const recs5 = [
+      { id: 'a', code: 'X', type: 'buy', date: '2026-01-01', amount: 1000, createdAt: 1 },
+      { id: 'b', code: 'X', type: 'sell', date: '2026-01-05', amount: 500, createdAt: 2 },
+      { id: 'c', code: 'X', type: 'sell', date: '2026-01-10', amount: 300, createdAt: 3 },
+      { id: 'e', code: 'X', type: 'buy', date: '2026-01-15', amount: 1000, createdAt: 4 }
+    ];
+    const en5 = sandbox.enrichRecords(recs5, { points: pts5 });
+    ok('较上次卖出：首笔卖出为基准（null）', en5[1].vsPrevSell === null && en5[1].type === 'sell');
+    ok('较上次卖出：第二笔卖出相对第一笔（+9.09%）',
+       Math.abs(en5[2].vsPrevSell - ((1.2 - 1.1) / 1.1) * 100) < 1e-9, 'got ' + en5[2].vsPrevSell);
+    ok('较上次卖出：首笔买入（尚无卖出）为 null', en5[0].vsPrevSell === null);
+    ok('较上次卖出：其后的买入相对最近一次卖出（-25%）',
+       Math.abs(en5[3].vsPrevSell - ((0.9 - 1.2) / 1.2) * 100) < 1e-9, 'got ' + en5[3].vsPrevSell);
+    ok('较上次卖出：卖出点同时保留相对上次买入',
+       Math.abs(en5[2].vsPrev - ((1.2 - 1.0) / 1.0) * 100) < 1e-9, 'got ' + en5[2].vsPrev);
+  }
+}
+
+{
+  const src2 = [
+    extract('adjReturnPct'),
+    extract('latestVsLastAction'),
+    extract('compareMarkersToPrevActions'),
+    extract('rangeLabel')
+  ].filter(Boolean).join('\n');
+  let api2 = null;
+  try {
+    api2 = new Function(src2 + '\nreturn { adjReturnPct, latestVsLastAction, compareMarkersToPrevActions, rangeLabel };')();
+    ok('新口径函数可独立执行', true);
+  } catch (e) {
+    ok('新口径函数可独立执行', false, e.message);
+  }
+
+  if (api2) {
+    const en = [
+      { type: 'buy', nav: 1.0, ac: null, navDate: '2026-01-01', latestNav: 1.2, latestAc: null },
+      { type: 'sell', nav: 1.5, ac: null, navDate: '2026-02-01', latestNav: 1.2, latestAc: null }
+    ];
+    const mv = api2.latestVsLastAction(en);
+    ok('最新 vs 前次买入 = +20%', Math.abs(mv.vsBuy - 20) < 1e-9, 'got ' + mv.vsBuy);
+    ok('最新 vs 前次卖出 = -20%', Math.abs(mv.vsSell - (-20)) < 1e-9, 'got ' + mv.vsSell);
+    ok('基准日期随指标返回', mv.buyDate === '2026-01-01' && mv.sellDate === '2026-02-01',
+       mv.buyDate + ' / ' + mv.sellDate);
+
+    const onlySell = api2.latestVsLastAction([
+      { type: 'sell', nav: 1.5, ac: null, navDate: '2026-02-01', latestNav: 1.2, latestAc: null }
+    ]);
+    ok('无买入记录时 vsBuy 为 null（列表留空）', onlySell.vsBuy === null && onlySell.vsSell !== null);
+
+    // 标记口径：无上次同类操作 → 以区间首点为基准
+    const rangeFirst = { nav: 2.0, ac: null, date: '2026-01-01' };
+    const en2 = [
+      { type: 'buy', nav: 1.0, ac: null, navDate: '2026-01-05' },
+      { type: 'buy', nav: 1.2, ac: null, navDate: '2026-01-10' },
+      { type: 'sell', nav: 1.3, ac: null, navDate: '2026-01-15' }
+    ];
+    const cl = api2.compareMarkersToPrevActions(en2, rangeFirst);
+    ok('首笔买入无上次买入 → 基准为区间首点（-50%）',
+       cl[0].buyBase === 'range' && Math.abs(cl[0].buy - (-50)) < 1e-9,
+       cl[0].buyBase + ' ' + cl[0].buy);
+    ok('第 2 笔买入相对上次买入（+20%）',
+       cl[1].buyBase === 'prev' && Math.abs(cl[1].buy - 20) < 1e-9, cl[1].buyBase + ' ' + cl[1].buy);
+    ok('卖出点无上次卖出 → 基准为区间首点（-35%）',
+       cl[2].sellBase === 'range' && Math.abs(cl[2].sell - (-35)) < 1e-9,
+       cl[2].sellBase + ' ' + cl[2].sell);
+    ok('卖出点同时给出相对上次买入（+8.33%）',
+       Math.abs(cl[2].buy - ((1.3 - 1.2) / 1.2) * 100) < 1e-6,
+       'got ' + cl[2].buy);
+    ok('基准点即该点自身时标记为 self',
+       api2.compareMarkersToPrevActions(
+         [{ type: 'buy', nav: 2.0, ac: null, navDate: '2026-01-01' }], rangeFirst
+       )[0].buyBase === 'self');
+    ok('区间名映射正确', api2.rangeLabel('90') === '近3月' && api2.rangeLabel('all') === '成立以来' &&
+       api2.rangeLabel(3650) === '近10年');
+  }
 }
 
 /* ============================================================

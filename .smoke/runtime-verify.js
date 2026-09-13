@@ -106,7 +106,13 @@ function makeFetch(storeRef, navRef) {
       return Promise.resolve(jsonRes(SEARCH_RESULT));
     }
     if (u.indexOf('/api/fund/nav') === 0) {
-      return Promise.resolve(jsonRes(FUND_DETAIL));
+      // 回显请求的基金代码，便于测试「多只基金」场景
+      const cm = u.match(/code=(\d+)/);
+      const reqCode = cm ? cm[1] : '110022';
+      return Promise.resolve(jsonRes({
+        ok: true,
+        data: Object.assign({}, FUND_DETAIL.data, { code: reqCode })
+      }));
     }
     return Promise.resolve(jsonRes({ ok: false, error: '未模拟的接口: ' + u }));
   };
@@ -192,10 +198,23 @@ function wait(ms) {
     check('行可拖拽（手动排序模式）', fundRows[0].getAttribute('draggable') === 'true');
   }
   const fundHead = doc.querySelector('#fundTable thead');
-  check('表头含浮动盈亏与最大回撤列',
-        !!fundHead && fundHead.textContent.indexOf('浮动盈亏') >= 0 &&
+  check('表头含「相较于前次买入 / 前次卖出」与最大回撤列',
+        !!fundHead && fundHead.textContent.indexOf('相较于前次买入') >= 0 &&
+        fundHead.textContent.indexOf('相较于前次卖出') >= 0 &&
         fundHead.textContent.indexOf('成立以来最大回撤') >= 0,
         fundHead ? fundHead.textContent.slice(0, 80) : 'null');
+  check('表头不再出现「浮动盈亏」', !!fundHead && fundHead.textContent.indexOf('浮动盈亏') < 0);
+  {
+    // 示例数据：4 买 1 卖均在 110022 → 两列都应有数值（非 —）
+    const cells = fundRows.length ? fundRows[0].querySelectorAll('td') : [];
+    const buyCell = fundRows.length ? fundRows[0].querySelector('[data-label="相较于前次买入"]') : null;
+    const sellCell = fundRows.length ? fundRows[0].querySelector('[data-label="相较于前次卖出"]') : null;
+    check('「相较于前次买入」列有涨跌幅数值',
+          !!buyCell && /[-+]?\d+(\.\d+)?%/.test(buyCell.textContent), buyCell ? buyCell.textContent : 'null');
+    check('「相较于前次卖出」列有涨跌幅数值',
+          !!sellCell && /[-+]?\d+(\.\d+)?%/.test(sellCell.textContent), sellCell ? sellCell.textContent : 'null');
+    check('列数已扩展为 7 列（新增两列）', cells.length === 7, 'cells=' + cells.length);
+  }
   check('启动自动升级标记已写入净值缓存',
         !!(navRef.funds['110022'] && navRef.funds['110022'].full === true),
         navRef.funds['110022'] ? 'full=' + navRef.funds['110022'].full : 'no fund');
@@ -213,6 +232,159 @@ function wait(ms) {
     check('localStorage 兜底只存记录（体积可控）',
           !!(lsObj && Array.isArray(lsObj.records) && !lsObj.funds),
           ls ? 'len=' + ls.length : 'empty');
+  }
+
+  console.log('\n【1c-】买卖记录表（较上次卖出列）');
+
+  {
+    const recRows1 = doc.querySelectorAll('#recBody tr');
+    const firstRow = recRows1[0];
+    check('记录表每行 10 列（新增较上次卖出）', !!firstRow && firstRow.querySelectorAll('td').length === 10,
+          firstRow ? 'cells=' + firstRow.querySelectorAll('td').length : 'null');
+    let sellRow = null, buyRow = null;
+    recRows1.forEach((r) => {
+      if (!sellRow && /badge-sell/.test(r.innerHTML)) sellRow = r;
+      if (!buyRow && /badge-buy/.test(r.innerHTML)) buyRow = r;
+    });
+    check('记录表存在买入行与卖出行（示例数据）', !!sellRow && !!buyRow);
+    if (sellRow) {
+      const cell = sellRow.querySelector('[data-label="较上次卖出"]');
+      check('首笔卖出的「较上次卖出」显示基准',
+            !!cell && /基准/.test(cell.textContent), cell ? cell.textContent : 'null');
+    }
+    if (buyRow) {
+      const buyCell = buyRow.querySelector('[data-label="较上次卖出"]');
+      check('买入行早于全部卖出时「较上次卖出」留空',
+            !!buyCell && buyCell.textContent.indexOf('基准') < 0 && buyCell.textContent.indexOf('—') >= 0,
+            buyCell ? buyCell.textContent : 'null');
+    }
+    const recHead = doc.querySelector('#recTable thead');
+    check('记录表表头含「较上次买入 / 较上次卖出」',
+          !!recHead && recHead.textContent.indexOf('较上次买入') >= 0 &&
+          recHead.textContent.indexOf('较上次卖出') >= 0);
+  }
+
+  console.log('\n【1c】数据源详情跳转');  // jsdom 未实现 window.open，用 stub 捕获调用参数
+  let opened = null;
+  window.open = function (url, target) { opened = { url: url, target: target }; return { opener: {} }; };
+
+  const sourceBtn = doc.querySelector('#fundBody button[data-act="source"]');
+  check('行内有「详情」按钮', !!sourceBtn, sourceBtn ? sourceBtn.textContent.trim() : 'null');
+  if (sourceBtn) {
+    const rowCode = (fundRows[0] && fundRows[0].getAttribute('data-code')) || '110022';
+    sourceBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    check('点击详情以新标签页打开数据源详情页',
+          !!opened && opened.url === 'https://fund.eastmoney.com/' + rowCode + '.html' && opened.target === '_blank',
+          JSON.stringify(opened));
+  }
+
+  console.log('\n【1d】拖拽排序（事件链路）');
+
+  {
+    const fInput = doc.getElementById('fundInput');
+    const lBtn = doc.getElementById('btnLoadFund');
+    if (fInput && lBtn) {
+      fInput.value = '110026';
+      lBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(600);
+    }
+    const rows1 = doc.querySelectorAll('#fundBody tr');
+    check('加载第二只基金后表格有 2 行', rows1.length >= 2, 'rows=' + rows1.length);
+
+    if (rows1.length >= 2) {
+      check('手动排序模式下行可拖拽',
+            rows1[0].getAttribute('draggable') === 'true' && rows1[1].getAttribute('draggable') === 'true');
+
+      const srcRow = rows1[0], dstRow = rows1[1];
+      const codeA = srcRow.getAttribute('data-code');
+      const codeB = dstRow.getAttribute('data-code');
+
+      srcRow.dispatchEvent(new window.Event('dragstart', { bubbles: true }));
+      check('dragstart 后行进入 dragging 态',
+            (srcRow.getAttribute('class') || '').indexOf('dragging') >= 0,
+            srcRow.getAttribute('class'));
+
+      dstRow.dispatchEvent(new window.MouseEvent('drop', { bubbles: true, clientY: 0 }));
+      await wait(300);
+
+      const after = Array.from(doc.querySelectorAll('#fundBody tr')).map((t) => t.getAttribute('data-code'));
+      check('drop 后顺序改变（拖拽行移到目标行之后）',
+            after.indexOf(codeA) > after.indexOf(codeB),
+            codeA + ' / ' + codeB + ' → ' + after.join(' > '));
+      check('顺序已随记录持久化',
+            !!(storeRef.data && Array.isArray(storeRef.data.fundOrder) &&
+               storeRef.data.fundOrder.indexOf(codeA) > storeRef.data.fundOrder.indexOf(codeB)),
+            storeRef.data ? JSON.stringify(storeRef.data.fundOrder) : 'no store');
+      check('拖拽后退出数值排序模式（恢复手动）',
+            !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === ''),
+            storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+
+      // 切回 110022，保持后续用例（概览/图表）口径不变
+      const backRows = doc.querySelectorAll('#fundBody tr');
+      for (let bi = 0; bi < backRows.length; bi++) {
+        if (backRows[bi].getAttribute('data-code') === '110022') {
+          const nameEl = backRows[bi].querySelector('[data-act="switch"]');
+          if (nameEl) nameEl.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+          break;
+        }
+      }
+      await wait(300);
+      check('测试后已切回 110022', /110022/.test(doc.getElementById('metaCode').textContent),
+            doc.getElementById('metaCode').textContent);
+    }
+  }
+
+  console.log('\n【1d】表头排序（含最大回撤回归）');
+
+  {
+    const sortTh = doc.querySelector('#fundTable th[data-sort="mdd"]');
+    check('「最大回撤」表头可排序（data-sort=mdd）', !!sortTh);
+    if (sortTh) {
+      // 降序
+      sortTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(200);
+      check('点击最大回撤后进入降序排序',
+            !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === 'mdd' &&
+               storeRef.data.fundSort.dir === 'desc'),
+            storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+      check('降序箭头已标记',
+            sortTh.querySelector('.sort-arrow').textContent === '▼',
+            sortTh.querySelector('.sort-arrow').textContent);
+      check('排序模式下行不再可拖拽',
+            doc.querySelector('#fundBody tr').getAttribute('draggable') !== 'true');
+
+      // 升序
+      sortTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(200);
+      check('再点切换为升序',
+            !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === 'mdd' &&
+               storeRef.data.fundSort.dir === 'asc'),
+            storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+
+      // 恢复手动
+      sortTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(200);
+      check('第三次点击恢复手动拖拽模式',
+            !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === ''),
+            storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+
+      // 相较于前次买入列同样可排序（抽查一次后恢复）
+      const buyTh = doc.querySelector('#fundTable th[data-sort="vsBuy"]');
+      if (buyTh) {
+        buyTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        await wait(200);
+        check('「相较于前次买入」表头可排序',
+              !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === 'vsBuy'),
+              storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+        buyTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        await wait(150);
+        buyTh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        await wait(150);
+        check('抽查后已恢复手动模式',
+              !!(storeRef.data && storeRef.data.fundSort && storeRef.data.fundSort.key === ''),
+              storeRef.data ? JSON.stringify(storeRef.data.fundSort) : 'no store');
+      }
+    }
   }
 
   console.log('\n【2】图表渲染');
@@ -239,8 +411,12 @@ function wait(ms) {
   // 检查标注文字里是否有百分比
   let svgText = '';
   texts.forEach((t) => { svgText += t.textContent + '|'; });
-  check('买入点标注含涨跌幅百分比', /[-+]?\d+(\.\d+)?%/.test(svgText) || /基准/.test(svgText),
+  check('买卖点标注含涨跌幅百分比', /[-+]?\d+(\.\d+)?%/.test(svgText) || /基准/.test(svgText),
         svgText.slice(0, 120));
+  check('每个买卖点标注两行（买 / 卖各一行）',
+        (svgText.match(/买[^|]*\|/g) || []).length >= 2 && /卖[^|]*\|/.test(svgText),
+        svgText.slice(0, 200));
+  check('标签上无「浮动盈亏」字样（改为较前次口径）', svgText.indexOf('浮动盈亏') < 0);
 
   const legend = doc.getElementById('chartLegend');
   check('图例已渲染', legend && legend.textContent.indexOf('基金净值') >= 0,
@@ -249,6 +425,20 @@ function wait(ms) {
         legend && legend.textContent.indexOf('15日均线') >= 0 &&
         legend.textContent.indexOf('60日均线') >= 0 && legend.textContent.indexOf('卖出点') >= 0,
         legend ? legend.textContent.slice(0, 120) : 'null');
+  {
+    const dots = legend ? legend.querySelectorAll('.legend-dot') : [];
+    const buyDots = Array.prototype.filter.call(dots, (d) => (d.parentNode.textContent || '').trim() === '买入点');
+    check('图例中「买入点」只有一条', buyDots.length === 1, 'count=' + buyDots.length);
+    check('图例去掉括号说明（买入点（…）/ 卖出点（…））',
+          legend && legend.textContent.indexOf('买入点（') < 0 && legend.textContent.indexOf('卖出点（') < 0);
+    check('图例含「较前次买入 / 较前次卖出」读数',
+          legend && legend.textContent.indexOf('较前次买入') >= 0 && legend.textContent.indexOf('较前次卖出') >= 0,
+          legend ? legend.textContent.slice(-160) : 'null');
+    check('图例标注「无上次记录时基准取所选区间首个交易日」',
+          legend && legend.textContent.indexOf('首个交易日') >= 0);
+    check('图例标注了当前区间名（近X月/年 或 成立以来）',
+          legend && /近\d+[月年]|成立以来/.test(legend.textContent));
+  }
 
   const ma15Path = doc.querySelector('#chartSvg path[stroke="#ffb020"]');
   const ma60Path = doc.querySelector('#chartSvg path[stroke="#b57bff"]');
@@ -257,18 +447,75 @@ function wait(ms) {
   const sellMarker = doc.querySelector('#chartSvg rect[data-marker]');
   check('卖出点以菱形标记绘制', !!sellMarker);
 
+  console.log('\n【2b】买卖点标签布局（不遮挡曲线/标记）');
+
+  {
+    // 切到近3月：示例数据的 4 笔买卖都落在近 90 天，区间内标记分散、便于检验避让
+    const r90 = doc.querySelector('.range-btn[data-range="90"]');
+    if (r90) {
+      r90.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(200);
+    }
+    const curve = doc.querySelector('#chartSvg path[stroke="#4f8cff"]');
+    const dAttr = curve ? curve.getAttribute('d') || '' : '';
+    const nums = dAttr.match(/-?\d+(?:\.\d+)?/g);
+    check('净值曲线可解析（标签避让检查前置）', !!nums && nums.length >= 4, 'n=' + (nums ? nums.length : 0));
+    if (nums && nums.length >= 4) {
+      const cPts = [];
+      for (let i = 0; i + 1 < nums.length; i += 2) cPts.push({ x: nums[i], y: nums[i + 1] });
+      const labelBoxes = Array.from(doc.querySelectorAll('#chartSvg g[pointer-events="none"] rect'))
+        .map((r) => ({
+          x: +r.getAttribute('x'), y: +r.getAttribute('y'),
+          w: +r.getAttribute('width'), h: +r.getAttribute('height')
+        }))
+        .filter((b) => b.w >= 40 && b.h >= 20);
+      check('标签框数量与买卖点一致',
+            labelBoxes.length === doc.querySelectorAll('#chartSvg [data-marker]').length,
+            'labels=' + labelBoxes.length + ' markers=' + doc.querySelectorAll('#chartSvg [data-marker]').length);
+      const covered = cPts.filter((p) => labelBoxes.some(
+        (b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h));
+      check('标签框不覆盖任何曲线采样点', covered.length === 0, 'covered=' + covered.length);
+      // 标签框互不重叠
+      let overlapped = 0;
+      for (let i = 0; i < labelBoxes.length; i++) {
+        for (let j = i + 1; j < labelBoxes.length; j++) {
+          const a = labelBoxes[i], b = labelBoxes[j];
+          if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) overlapped++;
+        }
+      }
+      check('标签框之间互不重叠', overlapped === 0, 'overlapped=' + overlapped);
+      // 标签框不压标记点（点在框外）
+      const markerEls = Array.from(doc.querySelectorAll('#chartSvg [data-marker]'));
+      const pts2 = markerEls.map((m) => ({
+        x: +(m.tagName === 'rect' ? +m.getAttribute('x') + 5.5 : m.getAttribute('cx')),
+        y: +(m.tagName === 'rect' ? +m.getAttribute('y') + 5.5 : m.getAttribute('cy'))
+      }));
+      const onLabel = pts2.filter((p) => labelBoxes.some(
+        (b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h));
+      check('标签框不压买卖点标记', onLabel.length === 0, 'onLabel=' + onLabel.length);
+      // 恢复全部区间
+      const rAll = doc.querySelector('.range-btn[data-range="all"]');
+      if (rAll) {
+        rAll.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        await wait(150);
+      }
+    }
+  }
+
   console.log('\n【3】数据概览');
 
   const statCards = doc.querySelectorAll('#statGrid .stat');
-  check('概览卡片 3 张（已精简）', statCards.length === 3, 'cards=' + statCards.length);
-  if (statCards.length === 3) {
+  check('概览卡片 4 张（新增较前次买入 / 前次卖出）', statCards.length === 4, 'cards=' + statCards.length);
+  if (statCards.length === 4) {
     const vals = [];
     statCards.forEach((c) => vals.push(c.textContent.replace(/\s+/g, ' ').trim()));
     console.log('     ' + vals.join('\n     '));
     check('无持有市值卡片', vals.join(' ').indexOf('持有市值') < 0);
     check('投入本金已计算（含 ¥）', /¥[\d,]+/.test(vals[1]));
-    check('浮动盈亏显示百分比', /[-+]?\d+(\.\d+)?%/.test(vals[2]), vals[2]);
-    check('浮动盈亏不显示金额（无 ¥）', vals[2].indexOf('¥') < 0, vals[2]);
+    check('第三张为「相较于前次买入」且显示百分比', /相较于前次买入/.test(vals[2]) && /[-+]?\d+(\.\d+)?%/.test(vals[2]), vals[2]);
+    check('第四张为「相较于前次卖出」且显示百分比', /相较于前次卖出/.test(vals[3]) && /[-+]?\d+(\.\d+)?%/.test(vals[3]), vals[3]);
+    check('概览不再显示总体浮动盈亏', vals.join(' ').indexOf('浮动盈亏') < 0);
+    check('概览不显示金额（无 ¥ 的涨跌幅卡）', vals[2].indexOf('¥') < 0 && vals[3].indexOf('¥') < 0);
   }
 
   console.log('\n【4】运行时错误');
