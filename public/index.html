@@ -344,6 +344,36 @@ th.sortable:hover { color: var(--text); }
 .badge-flat { background: rgba(141,149,168,.16); color: var(--text-dim); }
 .badge-base { background: rgba(141,149,168,.14); color: var(--text-faint); }
 
+/* 均线模式切换组（顾比 · 关闭），靠工具栏右侧 */
+.ma-mode-group { margin-left: auto; }
+
+/* 顾比均线操作建议面板（左边条颜色随建议类型变化） */
+.gmma-advice {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid #8d95a8;
+  border-radius: var(--radius-sm);
+  background: rgba(141,149,168,.06);
+  font-size: 13px; line-height: 1.7;
+}
+.gmma-advice.buy  { border-left-color: var(--up);   background: rgba(255,91,91,.07); }
+.gmma-advice.sell { border-left-color: var(--down); background: rgba(38,194,129,.07); }
+.gmma-advice.hold { border-left-color: var(--accent); background: rgba(79,140,255,.06); }
+.advice-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-weight: 650; font-size: 13.5px; margin-bottom: 7px;
+}
+.advice-reasons { margin: 0; padding-left: 18px; color: var(--text-dim); }
+.advice-reasons li { margin: 2px 0; }
+.advice-stats {
+  margin-top: 8px; padding-top: 7px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-faint); font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.advice-note { margin-top: 6px; color: var(--text-faint); font-size: 11.5px; }
+
 /* ================================================================
    买入记录表 / 列表
    ================================================================ */
@@ -584,6 +614,7 @@ th.num { text-align: right; }
             <th class="num sortable" data-sort="vsBuy" style="width: 118px; text-align: center;" title="最新净值相对最后一次买入净值的涨跌幅（含分红）；无买入记录时留空" data-page-node-id="fqih3CqaaaLx9Tus9BWTHb">相较于前次买入<span class="sort-arrow" data-arrow="vsBuy" data-page-node-id="xy7k7yfZSfXL7AEYciug1n"></span></th>
             <th class="num sortable" data-sort="vsSell" style="width: 118px; text-align: center;" title="最新净值相对最后一次卖出净值的涨跌幅（含分红）；无卖出记录时留空" data-page-node-id="aQK4F0zHnH6WqLZKmRkVe1">相较于前次卖出<span class="sort-arrow" data-arrow="vsSell" data-page-node-id="pR2dQ8sTn3mYvXcJbW4kLz"></span></th>
             <th class="num sortable" data-sort="mdd" style="width: 130px; text-align: center;" data-page-node-id="UKz6unc3xu8gLhynHosCjy">成立以来最大回撤<span class="sort-arrow" data-arrow="mdd" data-page-node-id="1nlRMTLNBYQ7balZvcUpnS"></span></th>
+            <th class="num" style="width: 92px; text-align: center;" title="过去 5 个交易日内出现顾比均线交叉：金叉 = 短期组均值上穿长期组均值，死叉 = 下穿；历史不足 61 个交易日或窗口内无信号时留空">顾比信号</th>
             <th class="num" style="width: 230px; text-align: center;" data-page-node-id="4pJI2DF0sFS5rBEuV2rQg1">操作</th>
           </tr>
         </thead>
@@ -641,6 +672,10 @@ th.num { text-align: right; }
           <button class="range-btn" data-range="3650" data-page-node-id="HTdrrHe88VYYdBSNqYA2ZB">近10年</button>
           <button class="range-btn active" data-range="all" data-page-node-id="DvmiuTDBLaY8jeDmN7mVdx">全部</button>
         </div>
+        <div class="range-group ma-mode-group" id="maModeGroup">
+          <button class="range-btn active" data-ma="gmma">顾比均线</button>
+          <button class="range-btn" data-ma="none">关闭</button>
+        </div>
       </div>
     </div>
 
@@ -667,6 +702,8 @@ th.num { text-align: right; }
     </div>
 
     <div class="legend" id="chartLegend" data-page-node-id="E6RzVydCEeiEVEncIZ6dQM"></div>
+
+    <div id="gmmaAdvice" class="gmma-advice hidden"></div>
   </div>
 
   <!-- ============ 数据概览 ============ -->
@@ -945,6 +982,7 @@ var state = {
   records: [],        // [{ id, code, type, date, amount, note, createdAt }]
   currentCode: '',    // 当前查看的基金
   range: 'all',       // 图表区间
+  maMode: 'gmma',     // 均线模式：gmma（顾比均线，默认）| none
   syncState: 'local', // synced | syncing | local | error
   loading: false,
   rev: 0,             // 服务端记录版本号（并发校验用）
@@ -1570,18 +1608,269 @@ function computeVsActionsByDate(enriched, points) {
   return map;
 }
 
-/** 简单移动平均线：ts -> 均值（不足 n 个点时为 null），基于完整历史保证窗口左端正确 */
-function computeMA(points, n) {
+/* ---------- 5.2b 顾比均线（GMMA）与形态建议（纯函数，可单测） ---------- */
+
+var GMMA_SHORT = [3, 5, 8, 10, 12, 15];        // 短期组：EMA 周期
+var GMMA_LONG = [30, 35, 40, 45, 50, 60];      // 长期组：EMA 周期
+var GMMA_LONG_SEED_IDX = 59;                   // EMA60 自第 60 个点（索引 59）起有值
+var GMMA_SHORT_COLOR = '#22d3ee';              // 短期组配色（青）
+var GMMA_LONG_COLOR = '#e879f9';               // 长期组配色（品红）
+
+/**
+ * 指数移动平均线 EMA：以前 n 个点的简单均值为种子，种子点之前为 null。
+ * 递推：EMA(t) = EMA(t-1) + k × (nav − EMA(t-1))，k = 2/(n+1)。
+ */
+function computeEMA(points, n) {
   var map = {};
-  if (!points || !points.length) return map;
-  var win = [], sum = 0;
+  if (!points || !points.length || !(n >= 1)) return map;
+  var k = 2 / (n + 1), sum = 0, ema = null;
   for (var i = 0; i < points.length; i++) {
-    win.push(points[i].nav);
-    sum += points[i].nav;
-    if (win.length > n) { sum -= win.shift(); }
-    map[points[i].ts] = (win.length >= n) ? (sum / n) : null;
+    var v = points[i].nav;
+    if (i < n - 1) { sum += v; map[points[i].ts] = null; continue; }
+    if (i === n - 1) { ema = (sum + v) / n; }
+    else { ema = ema + k * (v - ema); }
+    map[points[i].ts] = ema;
   }
   return map;
+}
+
+/** 顾比均线：短期组（3/5/8/10/12/15）与长期组（30/35/40/45/50/60）各 6 条 EMA */
+function computeGMMA(points) {
+  var short = [], long = [], i;
+  if (!points || !points.length) return { short: short, long: long };
+  for (i = 0; i < GMMA_SHORT.length; i++) short.push(computeEMA(points, GMMA_SHORT[i]));
+  for (i = 0; i < GMMA_LONG.length; i++) long.push(computeEMA(points, GMMA_LONG[i]));
+  return { short: short, long: long };
+}
+
+/** 一组 EMA 在某交易日的统计量 {min,max,avg}；任一分量缺失（历史不足）返回 null */
+function gmmaGroupStats(maps, ts) {
+  if (!maps || !maps.length) return null;
+  var min = Infinity, max = -Infinity, sum = 0;
+  for (var i = 0; i < maps.length; i++) {
+    var v = maps[i] ? maps[i][ts] : null;
+    if (v == null || !isFinite(v)) return null;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+  return { min: min, max: max, avg: sum / maps.length };
+}
+
+/** 顾比两组均线在全部交易日的统计量（画组带与悬停浮层用）：{short:{ts:{min,max,avg}}, long:{...}} */
+function computeGmmaBandStats(gmma, points) {
+  var out = { short: {}, long: {} };
+  if (!gmma || !points) return out;
+  for (var i = 0; i < points.length; i++) {
+    var ts = points[i].ts;
+    var s = gmmaGroupStats(gmma.short, ts);
+    if (s) out.short[ts] = s;
+    var l = gmmaGroupStats(gmma.long, ts);
+    if (l) out.long[ts] = l;
+  }
+  return out;
+}
+
+/**
+ * 在 [fromIdx, toIdx] 范围内检测「短期组均值 × 长期组均值」的交叉点。
+ * 返回 [{ idx, ts, type: 'golden'（金叉/上穿）| 'death'（死叉/下穿） }]，按时间升序。
+ */
+function findGmmaCrosses(points, gmma, fromIdx, toIdx) {
+  var out = [];
+  if (!points || !gmma || !points.length) return out;
+  for (var i = Math.max(GMMA_LONG_SEED_IDX + 1, fromIdx); i <= toIdx && i < points.length; i++) {
+    var prevS = gmmaGroupStats(gmma.short, points[i - 1].ts);
+    var prevL = gmmaGroupStats(gmma.long, points[i - 1].ts);
+    var curS = gmmaGroupStats(gmma.short, points[i].ts);
+    var curL = gmmaGroupStats(gmma.long, points[i].ts);
+    if (!prevS || !prevL || !curS || !curL) continue;
+    var prevDiff = prevS.avg - prevL.avg, curDiff = curS.avg - curL.avg;
+    if (prevDiff <= 0 && curDiff > 0) out.push({ idx: i, ts: points[i].ts, type: 'golden' });
+    else if (prevDiff >= 0 && curDiff < 0) out.push({ idx: i, ts: points[i].ts, type: 'death' });
+  }
+  return out;
+}
+
+/** 顾比信号窗口（交易日）：最近 N 个交易日内出现金叉/死叉即在列表标记 */
+var GMMA_SIGNAL_WINDOW = 5;
+
+/**
+ * 检测基金最近 GMMA_SIGNAL_WINDOW 个交易日内是否出现顾比均线金叉/死叉（列表提示列用）。
+ * 窗口 = 净值序列的最后 N 个交易日（idx ∈ [n−N, n−1]）；历史不足（交叉需 ≥ 61 个点）
+ * 或窗口内无交叉时返回 null，否则返回窗口内最近的一个 { idx, ts, type }。
+ */
+function gmmaRecentCross(fund, days) {
+  var points = fund && fund.points;
+  if (!points || !points.length || !(days >= 1)) return null;
+  var n = points.length;
+  var gmma = computeGMMA(points);
+  var crosses = findGmmaCrosses(points, gmma, n - days, n - 1);
+  return crosses.length ? crosses[crosses.length - 1] : null;
+}
+
+/**
+ * 顾比均线形态分析：对 endIdx 对应的交易日给出操作建议与理由（纯函数）。
+ * 返回 { ok, action, label, tone, reasons[], stats }
+ *   action：buy 买入/加仓 · hold 持有 · wait 观望 · reduce 减仓 · sell 卖出/回避 · none 数据不足
+ *   tone  ：up（红）| down（绿）| info（蓝）| flat（灰），决定面板左边条与徽章配色
+ *
+ * 判定依据（顾比均线经典用法）：
+ *   1) 价格相对长期组的位置（支撑/压力）
+ *   2) 两组均线的方向（5 日斜率）与分离程度（组内带宽变化 = 发散/收敛）
+ *   3) 短期组与长期组均值的金叉/死叉（近 10 个交易日内的新鲜信号优先）
+ */
+function analyzeGmmaAt(points, gmma, endIdx) {
+  var out = { ok: false, action: 'none', label: '数据不足', tone: 'flat', reasons: [], stats: null };
+  if (!points || !gmma || !points.length || endIdx == null || endIdx < 0 || endIdx >= points.length) {
+    out.reasons = ['暂无净值数据，请先加载净值'];
+    return out;
+  }
+  var ts = points[endIdx].ts;
+  var price = points[endIdx].nav;
+  var sv = gmmaGroupStats(gmma.short, ts);
+  var lv = gmmaGroupStats(gmma.long, ts);
+  if (!sv || !lv) {
+    out.reasons = ['该基金历史净值不足 60 个交易日，顾比长期组（30~60 日 EMA）尚无法计算'];
+    return out;
+  }
+
+  function pct(v) { return (v > 0 ? '+' : '') + v.toFixed(2) + '%'; }
+  function f4(v) { return v.toFixed(4); }
+
+  var i5 = Math.max(GMMA_LONG_SEED_IDX, endIdx - 5);
+  var i10 = Math.max(GMMA_LONG_SEED_IDX, endIdx - 10);
+  var sv5 = gmmaGroupStats(gmma.short, points[i5].ts);
+  var lv5 = gmmaGroupStats(gmma.long, points[i5].ts);
+  var sv10 = gmmaGroupStats(gmma.short, points[i10].ts);
+
+  var shortSlope = sv5 ? (sv.avg - sv5.avg) / sv5.avg * 100 : null;
+  var longSlope = lv5 ? (lv.avg - lv5.avg) / lv5.avg * 100 : null;
+  var shortWidth = (sv.max - sv.min) / sv.avg * 100;
+  var shortWidth10 = sv10 ? (sv10.max - sv10.min) / sv10.avg * 100 : null;
+  var bias = (sv.avg - lv.avg) / lv.avg * 100;
+  var aboveLong = price > lv.max;
+  var belowLong = price < lv.min;
+  var shortAboveLong = sv.min > lv.max;
+  var shortBelowLong = sv.max < lv.min;
+
+  var crosses = findGmmaCrosses(points, gmma, GMMA_LONG_SEED_IDX + 1, endIdx);
+  var lastCross = null;
+  for (var c = crosses.length - 1; c >= 0; c--) {
+    if (endIdx - crosses[c].idx <= 10) { lastCross = crosses[c]; break; }  // 只认近 10 个交易日的新鲜信号
+  }
+
+  out.ok = true;
+  out.stats = {
+    price: price,
+    shortMin: sv.min, shortMax: sv.max, shortAvg: sv.avg,
+    longMin: lv.min, longMax: lv.max, longAvg: lv.avg,
+    shortSlope: shortSlope, longSlope: longSlope,
+    bias: bias, shortWidth: shortWidth, shortWidth10: shortWidth10
+  };
+
+  // 公共事实行：先摆数据，再下结论
+  var R = [];
+  R.push('净值 ' + f4(price) + (aboveLong ? '，高于长期组上轨 ' + f4(lv.max)
+    : belowLong ? '，低于长期组下轨 ' + f4(lv.min)
+    : '，落在长期组带内（' + f4(lv.min) + ' ~ ' + f4(lv.max) + '）'));
+  R.push('短期组（3~15 日 EMA）均值 ' + f4(sv.avg) + '，5 日斜率 ' + (shortSlope == null ? '—' : pct(shortSlope)) +
+    (shortWidth10 == null ? '' : shortWidth >= shortWidth10
+      ? '，组内发散（带宽 ' + shortWidth.toFixed(2) + '%，10 日前 ' + shortWidth10.toFixed(2) + '%）'
+      : '，组内收敛（带宽 ' + shortWidth.toFixed(2) + '%，10 日前 ' + shortWidth10.toFixed(2) + '%）'));
+  R.push('长期组（30~60 日 EMA）均值 ' + f4(lv.avg) + '，5 日斜率 ' + (longSlope == null ? '—' : pct(longSlope)));
+  R.push('短期组相对长期组乖离 ' + pct(bias));
+  if (lastCross) {
+    R.push((lastCross.type === 'golden' ? '近期出现金叉' : '近期出现死叉') +
+      '（短期组均值' + (lastCross.type === 'golden' ? '上' : '下') + '穿长期组均值，' +
+      (endIdx - lastCross.idx) + ' 个交易日前）');
+  }
+
+  var longUp = longSlope != null && longSlope > 0;
+  var longDown = longSlope != null && longSlope < 0;
+  var shortUp = shortSlope != null && shortSlope > 0;
+
+  if (lastCross && lastCross.type === 'golden') {
+    if (longUp) {
+      out.action = 'buy'; out.tone = 'up';
+      out.label = '买入 / 加仓（金叉 + 长期组转多）';
+      R.push('金叉出现且长期组已拐头向上，趋势反转得到长期组确认，可分批买入');
+    } else {
+      out.action = 'wait'; out.tone = 'flat';
+      out.label = '观望（金叉初期，长期组仍下行）';
+      R.push('长期组仍在下行，此金叉可能只是超跌反弹；待长期组走平转上、短期组站稳长期组上方后再介入');
+    }
+  } else if (lastCross && lastCross.type === 'death') {
+    if (longDown) {
+      out.action = 'sell'; out.tone = 'down';
+      out.label = '卖出 / 回避（死叉 + 长期组走空）';
+      R.push('死叉出现且长期组同步下行，下跌趋势得到长期组确认，建议卖出或回避');
+    } else {
+      out.action = 'hold'; out.tone = 'info';
+      out.label = '持有观望（死叉但长期组仍上行）';
+      R.push('长期组仍在上行，本次死叉更可能是上升趋势中的回调；持仓者可继续持有，若有效跌破长期组下轨再离场');
+    }
+  } else if (shortAboveLong && longUp && shortUp) {
+    if (aboveLong) {
+      out.action = 'buy'; out.tone = 'up';
+      out.label = '买入 / 持有（多头趋势确认）';
+      R.push('短期组整体位于长期组上方且两组同向上行，多头趋势确认；无持仓可顺势分批买入，已持仓继续持有');
+      if (shortWidth10 != null && shortWidth < shortWidth10 * 0.6) {
+        R.push('注意：短期组明显收敛，短期动能减弱，本次买入宜放慢节奏、分批进行');
+      }
+    } else {
+      out.action = 'hold'; out.tone = 'info';
+      out.label = '持有（多头趋势未破）';
+      R.push('两组均线呈多头排列，但净值短暂跌回长期组带内；趋势未破，持仓者持有观察');
+    }
+  } else if (shortBelowLong && longDown && !shortUp) {
+    out.action = 'sell'; out.tone = 'down';
+    out.label = '卖出 / 回避（空头趋势确认）';
+    R.push('短期组整体位于长期组下方且两组同向下行，空头趋势确认；已持仓建议分批离场，空仓者回避');
+  } else if (aboveLong && longUp && !shortUp) {
+    out.action = 'hold'; out.tone = 'info';
+    out.label = '持有（上升趋势中的整理）';
+    R.push('净值仍在长期组上方、长期组上行，但短期组走平或回落，属上升趋势中的整理；持有为主，暂不追高加仓');
+  } else if (!aboveLong && !belowLong && longUp) {
+    out.action = 'buy'; out.tone = 'up';
+    out.label = '回调买入（长期组支撑）';
+    R.push('净值回调至长期组带内而长期组仍上行，长期组构成动态支撑，可分批买入；若有效跌破长期组下轨则止损离场');
+  } else if (!aboveLong && !belowLong && longDown) {
+    out.action = 'reduce'; out.tone = 'down';
+    out.label = '减仓（反弹至长期组压力）';
+    R.push('净值反弹至长期组带内而长期组仍下行，长期组构成压力区，已持仓建议逢高减仓；未突破并站稳长期组上轨前不追买');
+  } else if (belowLong && longDown) {
+    out.action = 'sell'; out.tone = 'down';
+    out.label = '卖出（跌破长期组）';
+    R.push('净值已跌破长期组下轨且长期组下行，弱势确认，建议离场观望');
+  } else {
+    out.action = 'wait'; out.tone = 'flat';
+    out.label = '观望（多空信号交织）';
+    R.push('短期组与长期组相互缠绕、方向不一致，趋势不明确；等待两组分开且方向一致后再操作');
+  }
+
+  out.reasons = R;
+  return out;
+}
+
+/** 顾比建议面板 HTML（内容全为数字与固定文案，无用户输入，无需转义） */
+function gmmaAdviceHtml(a) {
+  if (!a) return '';
+  var toneCls = { up: 'buy', down: 'sell', info: 'hold', flat: 'wait' }[a.tone] || 'wait';
+  var badgeCls = a.action === 'buy' ? 'badge-up'
+    : (a.action === 'sell' || a.action === 'reduce') ? 'badge-down' : 'badge-flat';
+  var h = '<div class="advice-head"><span>顾比均线 · 操作建议</span>' +
+    '<span class="badge ' + badgeCls + '">' + a.label + '</span></div>';
+  h += '<ul class="advice-reasons">';
+  for (var i = 0; i < a.reasons.length; i++) h += '<li>' + a.reasons[i] + '</li>';
+  h += '</ul>';
+  if (a.ok && a.stats) {
+    var s = a.stats;
+    h += '<div class="advice-stats">短期组 ' + fmt(s.shortMin, 4) + ' ~ ' + fmt(s.shortMax, 4) +
+      '（均值 ' + fmt(s.shortAvg, 4) + '）· 长期组 ' + fmt(s.longMin, 4) + ' ~ ' + fmt(s.longMax, 4) +
+      '（均值 ' + fmt(s.longAvg, 4) + '）</div>';
+  }
+  h += '<div class="advice-note">建议由顾比均线形态规则推导（短期组 EMA 3~15 · 长期组 EMA 30~60），仅描述当前趋势状态，不构成投资建议。</div>';
+  return h;
 }
 
 /* ---------- 5.2c 图表标记标签的几何布置（纯函数，可单测） ---------- */
@@ -1902,14 +2191,14 @@ function normalizedFundOrder() {
   return order;
 }
 
-/** 单只基金指标：笔数 / 较前次买入% / 较前次卖出% / 成立以来最大回撤%（取回撤序列最小值） */
+/** 单只基金指标：笔数 / 较前次买入% / 较前次卖出% / 成立以来最大回撤%（取回撤序列最小值）/ 近 5 日顾比交叉信号 */
 function fundMetrics(code) {
   var fund = state.funds[code];
   var recs = [];
   for (var i = 0; i < state.records.length; i++) {
     if (state.records[i].code === code) recs.push(state.records[i]);
   }
-  var out = { count: recs.length, vsBuy: null, vsSell: null, buyDate: null, sellDate: null, mdd: null };
+  var out = { count: recs.length, vsBuy: null, vsSell: null, buyDate: null, sellDate: null, mdd: null, gmmaSignal: null };
   if (fund && fund.points && fund.points.length) {
     var mv = latestVsLastAction(enrichRecords(recs, fund));
     out.vsBuy = mv.vsBuy;
@@ -1923,6 +2212,7 @@ function fundMetrics(code) {
         if (out.mdd === null || v < out.mdd) out.mdd = v;
       }
     }
+    out.gmmaSignal = gmmaRecentCross(fund, GMMA_SIGNAL_WINDOW);
   }
   return out;
 }
@@ -2000,6 +2290,18 @@ function renderFundTable() {
       ? '<span style="color:var(--text-faint)">—</span>'
       : '<span class="' + pctClass(m.mdd) + '" style="font-weight:600">' + fmtPct(m.mdd) + '</span>';
 
+    // 顾比信号：最近 5 个交易日内的金叉（红▲）/ 死叉（绿▼）；无信号或历史不足留空
+    var gs = m.gmmaSignal, gmmaHtml = '<span style="color:var(--text-faint)">—</span>';
+    if (gs && gs.type) {
+      var gText = gs.type === 'golden' ? '金叉' : '死叉';
+      var gArrow = gs.type === 'golden' ? '▲' : '▼';
+      var gColor = gs.type === 'golden' ? 'var(--up)' : 'var(--down)';
+      var gTone = gs.type === 'golden' ? '上穿' : '下穿';
+      gmmaHtml = '<span style="color:' + gColor + ';font-weight:600" title="' +
+        escapeHtml(toDateStr(gs.ts)) + ' ' + gText + '（短期组均值' + gTone + '长期组均值）">' +
+        gText + ' ' + gArrow + '</span>';
+    }
+
     rows.push(
       '<tr data-code="' + escapeHtml(code) + '" class="' + rowCls + '"' + (manual ? ' draggable="true"' : '') + '>' +
         '<td class="drag-col" data-label="">' +
@@ -2015,6 +2317,7 @@ function renderFundTable() {
         '<td data-label="相较于前次买入" class="num">' + vsBuyHtml + '</td>' +
         '<td data-label="相较于前次卖出" class="num">' + vsSellHtml + '</td>' +
         '<td data-label="最大回撤" class="num">' + mddHtml + '</td>' +
+        '<td data-label="顾比信号" class="num">' + gmmaHtml + '</td>' +
         '<td data-label="操作" class="num"><div class="rec-actions">' +
           '<button class="btn btn-sm btn-ghost' + (isPinned ? ' pin-star' : '') + '" data-act="pin" title="' +
             (isPinned ? '取消置顶' : '置顶') + '">' +
@@ -2109,6 +2412,13 @@ function deleteFund(code) {
 }
 
 /* ---------- 5.4 图表（内联 SVG 手写） ---------- */
+
+/** 隐藏顾比建议面板（图表无数据 / 非顾比模式时调用） */
+function hideGmmaAdvice() {
+  var a = $('gmmaAdvice');
+  if (a) { a.classList.add('hidden'); a.innerHTML = ''; }
+}
+
 function renderChart() {
   var svg = $('chartSvg'), empty = $('chartEmpty');
   if (!svg || !empty) return;
@@ -2120,6 +2430,7 @@ function renderChart() {
     empty.classList.remove('hidden');
     hidePopup();
     hideChartCrosshair();
+    hideGmmaAdvice();
     return;
   }
 
@@ -2129,6 +2440,7 @@ function renderChart() {
     svg.classList.add('hidden');
     empty.classList.remove('hidden');
     hideChartCrosshair();
+    hideGmmaAdvice();
     return;
   }
 
@@ -2148,9 +2460,13 @@ function renderChart() {
     nav: points[0].nav, ac: points[0].ac, date: toDateStr(points[0].ts)
   });
 
-  // --- 均线窗口基于完整历史，保证可见区间左端也有值 ---
-  var ma15Map = computeMA(fund.points, 15);
-  var ma60Map = computeMA(fund.points, 60);
+  // --- 均线：顾比均线（GMMA），窗口基于完整历史，保证可见区间左端也有值 ---
+  var maMode = state.maMode || 'gmma';
+  var gmma = null, gmmaBand = null;
+  if (maMode === 'gmma') {
+    gmma = computeGMMA(fund.points);
+    gmmaBand = computeGmmaBandStats(gmma, fund.points);
+  }
 
   var W = 900, H = 320;
   var padL = 62, padR = 26, padT = 24, padB = 40;
@@ -2206,23 +2522,90 @@ function renderChart() {
               ' L' + X(points[0].ts).toFixed(1) + ' ' + (H - padB) + ' Z';
   parts.push('<defs><linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">' +
              '<stop offset="0%" stop-color="#4f8cff" stop-opacity="0.26"/>' +
-             '<stop offset="100%" stop-color="#4f8cff" stop-opacity="0"/></linearGradient></defs>');
+             '<stop offset="100%" stop-color="#4f8cff" stop-opacity="0"/></linearGradient>' +
+             '<clipPath id="plotClip"><rect x="' + padL + '" y="' + padT + '" width="' + plotW +
+             '" height="' + plotH + '"/></clipPath></defs>');
   parts.push('<path d="' + areaD + '" fill="url(#navGrad)"/>');
   parts.push('<path d="' + d + '" fill="none" stroke="#4f8cff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
 
-  // --- 均线（15/60 日，虚线；窗口不足处自动断开） ---
-  function maPath(map) {
+  // --- 顾比均线（窗口不足处自动断开；超出绘图区的部分用 plotClip 裁掉） ---
+  // 顾比均线/组带抽稀：长序列时隔点采样（EMA 平滑，>400 点时视觉无差），控制 SVG 体积
+  var gmmaStepLen = points.length > 400 ? Math.ceil(points.length / 400) : 1;
+  function maPathS(map, step) {
     var md = '', pen = false;
     for (var mk = 0; mk < points.length; mk++) {
       var mv = map[points[mk].ts];
       if (mv == null) { pen = false; continue; }
+      if (pen && mk % step !== 0 && mk !== points.length - 1) continue;
       md += (pen ? 'L' : 'M') + X(points[mk].ts).toFixed(1) + ' ' + Y(mv).toFixed(1) + ' ';
       pen = true;
     }
     return md;
   }
-  parts.push('<path d="' + maPath(ma15Map) + '" fill="none" stroke="#ffb020" stroke-width="1.4" stroke-dasharray="6 4" stroke-linejoin="round"/>');
-  parts.push('<path d="' + maPath(ma60Map) + '" fill="none" stroke="#b57bff" stroke-width="1.4" stroke-dasharray="3 5" stroke-linejoin="round"/>');
+
+  // 顾比组带：max 上沿 + min 下沿围成的填充带（连续段拼接，历史不足处断开）
+  function gmmaBandPath(statsMap, step) {
+    var d2 = '', run = [];
+    function out(a, edge) {
+      d2 += (a === 0 ? 'M' : 'L') + X(run[a].ts).toFixed(1) + ' ' + Y(run[a].s[edge]).toFixed(1) + ' ';
+    }
+    function flush() {
+      if (!run.length) return;
+      for (var a = 0; a < run.length; a++) {
+        if (a % step === 0 || a === run.length - 1) out(a, 'max');
+      }
+      for (var b = run.length - 1; b >= 0; b--) {
+        if (b % step === 0 || b === 0) out(b, 'min');
+      }
+      d2 += 'Z';
+      run = [];
+    }
+    for (var i2 = 0; i2 < points.length; i2++) {
+      var s2 = statsMap[points[i2].ts];
+      if (s2) run.push({ ts: points[i2].ts, s: s2 });
+      else flush();
+    }
+    flush();
+    return d2;
+  }
+
+  if (maMode === 'gmma' && gmma && gmmaBand) {
+    parts.push('<g clip-path="url(#plotClip)">');
+    // 组带（低透明填充）+ 组内 6 条 EMA 细线（长序列抽稀采样）
+    parts.push('<path d="' + gmmaBandPath(gmmaBand.short, gmmaStepLen) + '" fill="' + GMMA_SHORT_COLOR + '" fill-opacity="0.08"/>');
+    parts.push('<path d="' + gmmaBandPath(gmmaBand.long, gmmaStepLen) + '" fill="' + GMMA_LONG_COLOR + '" fill-opacity="0.08"/>');
+    for (var gi = 0; gi < gmma.short.length; gi++) {
+      parts.push('<path d="' + maPathS(gmma.short[gi], gmmaStepLen) + '" fill="none" stroke="' + GMMA_SHORT_COLOR +
+                 '" stroke-opacity="0.6" stroke-width="1"/>');
+    }
+    for (var gj = 0; gj < gmma.long.length; gj++) {
+      parts.push('<path d="' + maPathS(gmma.long[gj], gmmaStepLen) + '" fill="none" stroke="' + GMMA_LONG_COLOR +
+                 '" stroke-opacity="0.6" stroke-width="1"/>');
+    }
+    // 金叉（红▲）/ 死叉（绿▼）标记：可见区间内最近 8 个
+    var allCrosses = findGmmaCrosses(fund.points, gmma, GMMA_LONG_SEED_IDX + 1, fund.points.length - 1);
+    var visCrosses = [];
+    for (var vci = 0; vci < allCrosses.length; vci++) {
+      if (allCrosses[vci].ts >= points[0].ts) visCrosses.push(allCrosses[vci]);
+    }
+    var drawCrosses = visCrosses.slice(-8);
+    for (var tc = 0; tc < drawCrosses.length; tc++) {
+      var cr = drawCrosses[tc];
+      var sa = gmmaBand.short[cr.ts];
+      if (!sa) continue;
+      var cxs = X(cr.ts), cys = Y(sa.avg);
+      var tri = cr.type === 'golden'
+        ? 'M' + cxs.toFixed(1) + ' ' + (cys - 6).toFixed(1) +
+          ' L' + (cxs - 5).toFixed(1) + ' ' + (cys + 4).toFixed(1) +
+          ' L' + (cxs + 5).toFixed(1) + ' ' + (cys + 4).toFixed(1) + ' Z'
+        : 'M' + cxs.toFixed(1) + ' ' + (cys + 6).toFixed(1) +
+          ' L' + (cxs - 5).toFixed(1) + ' ' + (cys - 4).toFixed(1) +
+          ' L' + (cxs + 5).toFixed(1) + ' ' + (cys - 4).toFixed(1) + ' Z';
+      parts.push('<path d="' + tri + '" fill="' + (cr.type === 'golden' ? '#ff5b5b' : '#26c281') +
+                 '" fill-opacity="0.92" stroke="#0f1116" stroke-width="1"/>');
+    }
+    parts.push('</g>');
+  }
 
   // --- 最新净值点（需求 A：延伸到最新交易日，标注相对最近一次买入的涨跌） ---
   var latestNav = points[points.length - 1];
@@ -2354,15 +2737,19 @@ function renderChart() {
     dd: ddByDate, buy: buyByDate,
     cmp: computeVsActionsByDate(enriched, points),
     rangeName: rangeName,
-    ma15: ma15Map, ma60: ma60Map
+    maMode: maMode, gmma: gmmaBand
   };
   ensureChartHover(svg);
 
-  // --- 图例 ---
+  // --- 图例（均线部分随模式变化；买卖点条目共用，保证「买入点」只出现一条） ---
   var legendHtml = '';
   legendHtml += '<span class="legend-item"><span class="legend-line"></span>基金净值</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#ffb020"></span>15日均线</span>';
-  legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-style:dashed;border-top-color:#b57bff"></span>60日均线</span>';
+  if (maMode === 'gmma') {
+    legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-color:' + GMMA_SHORT_COLOR + '"></span>短期组 3~15 日 EMA</span>';
+    legendHtml += '<span class="legend-item"><span class="legend-line" style="border-top-color:' + GMMA_LONG_COLOR + '"></span>长期组 30~60 日 EMA</span>';
+    legendHtml += '<span class="legend-item"><span style="color:#ff5b5b;font-size:11px">&#9650;</span>金叉</span>';
+    legendHtml += '<span class="legend-item"><span style="color:#26c281;font-size:11px">&#9660;</span>死叉</span>';
+  }
   legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff5b5b"></span>买入点</span>';
   legendHtml += '<span class="legend-item"><span class="legend-dot" style="background:#ff9f43;border-radius:2px;transform:rotate(45deg)"></span>卖出点</span>';
   // 当前净值相对「前次买入 / 前次卖出」的涨跌幅（无记录时留空）
@@ -2379,6 +2766,19 @@ function renderChart() {
                 '涨跌幅含分红（累计净值口径）· 无上次买入/卖出记录时，基准取所选区间「' + escapeHtml(rangeName) +
                 '」的首个交易日 · 份额按单位净值折算</span>';
   $('chartLegend').innerHTML = legendHtml;
+
+  // --- 顾比均线操作建议（仅顾比模式显示；始终以最新净值为基准评估） ---
+  var adviceEl = $('gmmaAdvice');
+  if (adviceEl) {
+    if (maMode === 'gmma' && gmma) {
+      var analysis = analyzeGmmaAt(fund.points, gmma, fund.points.length - 1);
+      adviceEl.innerHTML = gmmaAdviceHtml(analysis);
+      adviceEl.classList.remove('hidden');
+    } else {
+      adviceEl.classList.add('hidden');
+      adviceEl.innerHTML = '';
+    }
+  }
 }
 
 /* ---------- 5.5 数据概览 ---------- */
@@ -2792,13 +3192,24 @@ function ensureChartHover(svg) {
     var item = c.buy[dateStr];
     var dd = c.dd[dateStr];
     var ddVal = '<span class="popup-val ' + pctClass(dd) + '">' + fmtPct(dd) + '</span>';
-    var ma15v = c.ma15 ? c.ma15[pt.ts] : null;
-    var ma60v = c.ma60 ? c.ma60[pt.ts] : null;
-    var maRows =
-      '<div class="popup-row"><span class="popup-key" style="color:#ffb020">15日均线</span><span class="popup-val">' +
-      (ma15v == null ? '—' : fmt(ma15v, 4)) + '</span></div>' +
-      '<div class="popup-row"><span class="popup-key" style="color:#b57bff">60日均线</span><span class="popup-val">' +
-      (ma60v == null ? '—' : fmt(ma60v, 4)) + '</span></div>';
+    var maRows = '';
+    if (c.maMode === 'gmma' && c.gmma) {
+      // 顾比模式：两组均值（含组内区间）与短-长乖离
+      var gs = c.gmma.short[pt.ts], gl = c.gmma.long[pt.ts];
+      var gmmaRow = function (key, st, color) {
+        var val = st
+          ? fmt(st.avg, 4) + '<span style="color:#5f6779;font-weight:400">（' + fmt(st.min, 4) + ' ~ ' + fmt(st.max, 4) + '）</span>'
+          : '—';
+        return '<div class="popup-row"><span class="popup-key" style="color:' + color + '">' + key +
+               '</span><span class="popup-val">' + val + '</span></div>';
+      };
+      maRows = gmmaRow('短期组均值', gs, '#22d3ee') + gmmaRow('长期组均值', gl, '#e879f9');
+      if (gs && gl) {
+        var biasNow = (gs.avg - gl.avg) / gl.avg * 100;
+        maRows += '<div class="popup-row"><span class="popup-key">短-长乖离</span><span class="popup-val ' +
+                  pctClass(biasNow) + '">' + fmtPct(biasNow, 2) + '</span></div>';
+      }
+    }
     var vsPrevRow = '';
 
     // 相对「上次买入 / 上次卖出」的两行（无同类操作时基准为所选区间首个交易日）
@@ -3618,6 +4029,22 @@ function bindEvents() {
         btns[i].classList.toggle('active', btns[i].getAttribute('data-range') === r);
       }
       renderChart();  // 只刷新图表，属同层独立渲染，不触发其他渲染函数
+    });
+  }
+
+  /* ---- 均线模式切换（顾比 · 关闭） ---- */
+  var maModeGroup = $('maModeGroup');
+  if (maModeGroup) {
+    maModeGroup.addEventListener('click', function (e) {
+      var t = e.target;
+      var m = t && t.getAttribute ? t.getAttribute('data-ma') : null;
+      if (!m) return;
+      state.maMode = m;
+      var maBtns = maModeGroup.querySelectorAll('.range-btn');
+      for (var i = 0; i < maBtns.length; i++) {
+        maBtns[i].classList.toggle('active', maBtns[i].getAttribute('data-ma') === m);
+      }
+      renderChart();  // 同层独立渲染，不影响其他区域
     });
   }
 

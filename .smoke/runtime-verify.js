@@ -203,6 +203,9 @@ function wait(ms) {
         fundHead.textContent.indexOf('相较于前次卖出') >= 0 &&
         fundHead.textContent.indexOf('成立以来最大回撤') >= 0,
         fundHead ? fundHead.textContent.slice(0, 80) : 'null');
+  check('表头含「顾比信号」列',
+        !!fundHead && fundHead.textContent.indexOf('顾比信号') >= 0,
+        fundHead ? fundHead.textContent.slice(0, 120) : 'null');
   check('表头不再出现「浮动盈亏」', !!fundHead && fundHead.textContent.indexOf('浮动盈亏') < 0);
   {
     // 示例数据：4 买 1 卖均在 110022 → 两列都应有数值（非 —）
@@ -213,7 +216,9 @@ function wait(ms) {
           !!buyCell && /[-+]?\d+(\.\d+)?%/.test(buyCell.textContent), buyCell ? buyCell.textContent : 'null');
     check('「相较于前次卖出」列有涨跌幅数值',
           !!sellCell && /[-+]?\d+(\.\d+)?%/.test(sellCell.textContent), sellCell ? sellCell.textContent : 'null');
-    check('列数已扩展为 7 列（新增两列）', cells.length === 7, 'cells=' + cells.length);
+    const gmmaCell = fundRows.length ? fundRows[0].querySelector('[data-label="顾比信号"]') : null;
+    check('行含「顾比信号」单元格', !!gmmaCell, gmmaCell ? 'ok' : 'missing');
+    check('列数已扩展为 8 列（新增顾比信号列）', cells.length === 8, 'cells=' + cells.length);
   }
   check('启动自动升级标记已写入净值缓存',
         !!(navRef.funds['110022'] && navRef.funds['110022'].full === true),
@@ -239,7 +244,7 @@ function wait(ms) {
   {
     const recRows1 = doc.querySelectorAll('#recBody tr');
     const firstRow = recRows1[0];
-    check('记录表每行 10 列（新增较上次卖出）', !!firstRow && firstRow.querySelectorAll('td').length === 10,
+    check('记录表每行 9 列（含较上次买入/较上次卖出/操作）', !!firstRow && firstRow.querySelectorAll('td').length === 9,
           firstRow ? 'cells=' + firstRow.querySelectorAll('td').length : 'null');
     let sellRow = null, buyRow = null;
     recRows1.forEach((r) => {
@@ -421,9 +426,9 @@ function wait(ms) {
   const legend = doc.getElementById('chartLegend');
   check('图例已渲染', legend && legend.textContent.indexOf('基金净值') >= 0,
         legend ? legend.textContent.slice(0, 60) : 'null');
-  check('图例含均线与卖出点',
-        legend && legend.textContent.indexOf('15日均线') >= 0 &&
-        legend.textContent.indexOf('60日均线') >= 0 && legend.textContent.indexOf('卖出点') >= 0,
+  check('图例含顾比两组与卖出点（默认顾比模式）',
+        legend && legend.textContent.indexOf('短期组') >= 0 &&
+        legend.textContent.indexOf('长期组') >= 0 && legend.textContent.indexOf('卖出点') >= 0,
         legend ? legend.textContent.slice(0, 120) : 'null');
   {
     const dots = legend ? legend.querySelectorAll('.legend-dot') : [];
@@ -440,10 +445,24 @@ function wait(ms) {
           legend && /近\d+[月年]|成立以来/.test(legend.textContent));
   }
 
-  const ma15Path = doc.querySelector('#chartSvg path[stroke="#ffb020"]');
-  const ma60Path = doc.querySelector('#chartSvg path[stroke="#b57bff"]');
-  check('MA15 均线已绘制（琥珀色虚线）', !!ma15Path && (ma15Path.getAttribute('stroke-dasharray') || '') !== '');
-  check('MA60 均线已绘制（紫色虚线）', !!ma60Path && (ma60Path.getAttribute('stroke-dasharray') || '') !== '');
+  /* ---- 顾比均线（默认模式）：建议面板 + 组带 ---- */
+  const adviceEl = doc.getElementById('gmmaAdvice');
+  check('顾比建议面板可见且含建议与理由',
+        !!adviceEl && (adviceEl.getAttribute('class') || '').indexOf('hidden') < 0 &&
+        adviceEl.textContent.indexOf('操作建议') >= 0 && adviceEl.querySelectorAll('li').length >= 1,
+        adviceEl ? adviceEl.textContent.slice(0, 140) : 'null');
+  check('建议面板含免责说明', !!adviceEl && adviceEl.textContent.indexOf('不构成投资建议') >= 0);
+  check('顾比短期组带已绘制（青色）', !!doc.querySelector('#chartSvg path[fill="#22d3ee"]'));
+  check('顾比长期组带已绘制（品红）', !!doc.querySelector('#chartSvg path[fill="#e879f9"]'));
+
+  /* ---- v2.4 起均线仅两档（顾比/关闭），经典模式已移除；点回顾比确认面板稳定 ---- */
+  const gmmaMaBtn = doc.querySelector('#maModeGroup .range-btn[data-ma="gmma"]');
+  if (gmmaMaBtn) {
+    gmmaMaBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await wait(200);
+  }
+  check('顾比模式下建议面板保持可见',
+        !!adviceEl && (adviceEl.getAttribute('class') || '').indexOf('hidden') < 0);
   const sellMarker = doc.querySelector('#chartSvg rect[data-marker]');
   check('卖出点以菱形标记绘制', !!sellMarker);
 
@@ -527,8 +546,8 @@ function wait(ms) {
 
   console.log('\n【5】交互：切换区间');
 
-  const rangeBtns = doc.querySelectorAll('.range-btn');
-  check('区间按钮 8 个（近1月~近10年+全部）', rangeBtns.length === 8, 'btns=' + rangeBtns.length);
+  const rangeBtns = doc.querySelectorAll('#rangeGroup .range-btn');
+  check('区间按钮 8 个（近1月~近10年+全部，均线模式按钮不计入）', rangeBtns.length === 8, 'btns=' + rangeBtns.length);
 
   const btn90 = doc.querySelector('.range-btn[data-range="90"]');
   if (btn90) {

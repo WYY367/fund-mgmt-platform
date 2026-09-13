@@ -208,14 +208,13 @@ const src = [
   extract('adjReturnPct'),
   extract('enrichRecords'),
   extract('summarize'),
-  extract('computeDrawdownMap'),
-  extract('computeMA')
+  extract('computeDrawdownMap')
 ].filter(Boolean).join('\n');
 
 const sandbox = {};
 try {
   const fn = new Function(src + `
-    return { toDateStr, findNavOnOrBefore, latestPoint, dateStrToTs, adjReturnPct, enrichRecords, summarize, computeDrawdownMap, computeMA };
+    return { toDateStr, findNavOnOrBefore, latestPoint, dateStrToTs, adjReturnPct, enrichRecords, summarize, computeDrawdownMap };
   `);
   Object.assign(sandbox, fn());
   ok('核心计算函数可独立执行', true);
@@ -404,16 +403,6 @@ if (sandbox.computeDrawdownMap) {
     ok('份额法：盈亏率 = 15%', Math.abs(s3.profitRate - 15) < 1e-9, 'got ' + s3.profitRate);
     ok('统计：买1卖1、卖出回款550',
        s3.buyCount === 1 && s3.sellCount === 1 && Math.abs(s3.sellAmount - 550) < 1e-9);
-
-    /* ---- MA 均线 ---- */
-    const maPts = [];
-    for (let mi = 1; mi <= 20; mi++) {
-      maPts.push({ ts: mi, nav: mi });
-    }
-    const ma15 = sandbox.computeMA(maPts, 15);
-    ok('均线：不足窗口时为 null', ma15[10] === null);
-    ok('均线：第15点 = 均值(1..15) = 8', Math.abs(ma15[15] - 8) < 1e-9, 'got ' + ma15[15]);
-    ok('均线：第20点 = 均值(6..20) = 13', Math.abs(ma15[20] - 13) < 1e-9, 'got ' + ma15[20]);
   }
 }
 
@@ -458,14 +447,11 @@ ok('批量新增：提交逻辑', /function submitBulkRecords\(\)/.test(html));
 ok('批量新增与管理互斥', /if \(on\) state\.batch\.active = false;/.test(html));
 ok('区间新增 近10年', /data-range="3650"/.test(html));
 ok('图表回撤按所选区间计算', /computeDrawdownMap\(points\)/.test(html));
-ok('存在 MA 计算函数（15/60 日）', /function computeMA\(points, n\)/.test(html) &&
-   /computeMA\(fund\.points, 15\)/.test(html) && /computeMA\(fund\.points, 60\)/.test(html));
-ok('均线为虚线且配色区分', /stroke="#ffb020"[^>]*stroke-dasharray/.test(html) && /stroke="#b57bff"[^>]*stroke-dasharray/.test(html));
-ok('图例含均线与卖出点', /15日均线/.test(html) && /60日均线/.test(html) && /<\/span>卖出点</.test(html));
+ok('图例含顾比均线与卖出点', /短期组 3~15 日 EMA/.test(html) && /长期组 30~60 日 EMA/.test(html) && /<\/span>卖出点</.test(html));
 ok('图例中「买入点」只有一条', /<span class="legend-dot" style="background:#ff5b5b"><\/span>买入点</.test(html) &&
    (html.match(/background:#ff5b5b"><\/span>买入点</g) || []).length === 1);
 ok('图例去掉括号说明', !/买入点（/.test(html) && !/卖出点（/.test(html));
-ok('悬停浮层显示均线值', /ma15: ma15Map/.test(html) && /15日均线/.test(html));
+ok('悬停浮层显示均线值', /maRows = gmmaRow\('短期组均值'/.test(html));
 
 /* ============================================================
    15. 迭代 v1.4：数据安全 / 分红口径 / 并发
@@ -763,6 +749,187 @@ ok('渲染层用 placeMarkerLabel 统一布置标签并记录已放框',
        )[0].buyBase === 'self');
     ok('区间名映射正确', api2.rangeLabel('90') === '近3月' && api2.rangeLabel('all') === '成立以来' &&
        api2.rangeLabel(3650) === '近10年');
+  }
+}
+
+/* ============================================================
+   19. 迭代 v2.4：顾比均线（GMMA）与买卖建议
+   ============================================================ */
+console.log('\n【迭代 v2.4】顾比均线与买卖建议');
+ok('存在 EMA 计算函数 computeEMA', /function\s+computeEMA\s*\(/.test(html));
+ok('顾比周期：短期组 3/5/8/10/12/15 · 长期组 30/35/40/45/50/60',
+   /GMMA_SHORT\s*=\s*\[3,\s*5,\s*8,\s*10,\s*12,\s*15\]/.test(html) &&
+   /GMMA_LONG\s*=\s*\[30,\s*35,\s*40,\s*45,\s*50,\s*60\]/.test(html));
+ok('存在 computeGMMA / gmmaGroupStats / computeGmmaBandStats / findGmmaCrosses',
+   /function\s+computeGMMA\s*\(/.test(html) && /function\s+gmmaGroupStats\s*\(/.test(html) &&
+   /function\s+computeGmmaBandStats\s*\(/.test(html) && /function\s+findGmmaCrosses\s*\(/.test(html));
+ok('存在形态分析函数 analyzeGmmaAt 与建议文案 gmmaAdviceHtml',
+   /function\s+analyzeGmmaAt\s*\(/.test(html) && /function\s+gmmaAdviceHtml\s*\(/.test(html));
+ok('工具栏有均线模式切换（顾比 · 关闭）',
+   /id="maModeGroup"/.test(html) && !/data-ma="classic"/.test(html) &&
+   /data-ma="gmma"/.test(html) && /data-ma="none"/.test(html));
+ok('顾比均线为默认模式', /maMode:\s*'gmma'/.test(html) &&
+   /<button class="range-btn active" data-ma="gmma">/.test(html));
+ok('存在建议面板容器 gmmaAdvice（图例下方）',
+   /id="gmmaAdvice"/.test(html) &&
+   html.indexOf('id="gmmaAdvice"') > html.indexOf('id="chartLegend"'));
+ok('建议面板随均线模式显隐（hideGmmaAdvice + renderChart 内分支）',
+   /function\s+hideGmmaAdvice\s*\(/.test(html) && /adviceEl\.classList\.remove\('hidden'\)/.test(html));
+ok('建议面板含免责口径说明', /不构成投资建议/.test(html));
+ok('悬停浮层区分均线模式（顾比组均值 / 关闭时无均线行）',
+   /c\.maMode === 'gmma'/.test(html) && !/15日均线/.test(html));
+ok('顾比组配色（青 #22d3ee / 品红 #e879f9）', /#22d3ee/.test(html) && /#e879f9/.test(html));
+ok('金叉红▲ / 死叉绿▼ 三角标记（涨红跌绿）',
+   /golden' \? '#ff5b5b' : '#26c281'/.test(html));
+ok('均线绘制套用绘图区裁剪（plotClip）', /clip-path="url\(#plotClip\)"/.test(html) && /id="plotClip"/.test(html));
+
+/* ---- 顾比计算与形态分析：纯函数重放 ---- */
+function extractVar(name) {
+  const mv = new RegExp('var\\s+' + name + '\\s*=\\s*\\[[^\\]]*\\]\\s*;').exec(html);
+  return mv ? mv[0] : '';
+}
+const src24 = [
+  extract('computeEMA'),
+  extract('computeGMMA'),
+  extract('gmmaGroupStats'),
+  extract('computeGmmaBandStats'),
+  extract('findGmmaCrosses'),
+  extract('analyzeGmmaAt')
+].filter(Boolean).join('\n') + '\n' +
+  extractVar('GMMA_SHORT') + '\n' + extractVar('GMMA_LONG') + '\n' +
+  (new RegExp('var\\s+GMMA_LONG_SEED_IDX\\s*=\\s*\\d+\\s*;').exec(html) || [''])[0];
+
+let api24 = null;
+try {
+  api24 = new Function(src24 + `
+    return { computeEMA, computeGMMA, gmmaGroupStats, computeGmmaBandStats, findGmmaCrosses, analyzeGmmaAt };
+  `)();
+  ok('顾比计算函数可独立执行', true);
+} catch (e) {
+  ok('顾比计算函数可独立执行', false, e.message);
+}
+
+if (api24) {
+  /* ---- EMA 正确性：线性序列 nav=1..12，n=3 → 第 3 点种子=2，其后滞后 1 ---- */
+  const emaPts = [];
+  for (let i = 1; i <= 12; i++) emaPts.push({ ts: i, nav: i });
+  const ema3 = api24.computeEMA(emaPts, 3);
+  ok('EMA：种子点之前为 null', ema3[1] === null && ema3[2] === null);
+  ok('EMA：第 3 点 = 前 3 点均值 = 2', Math.abs(ema3[3] - 2) < 1e-9, 'got ' + ema3[3]);
+  ok('EMA：第 4 点 = 2 + 0.5×(4−2) = 3', Math.abs(ema3[4] - 3) < 1e-9, 'got ' + ema3[4]);
+  ok('EMA：第 12 点 = 11（线性序列滞后 1）', Math.abs(ema3[12] - 11) < 1e-9, 'got ' + ema3[12]);
+  ok('EMA：空数据返回空映射', Object.keys(api24.computeEMA([], 5)).length === 0);
+
+  /* ---- GMMA 组统计：恒定序列 ---- */
+  const flatPts = [];
+  for (let i = 1; i <= 80; i++) flatPts.push({ ts: i, nav: 2 });
+  const gmmaFlat = api24.computeGMMA(flatPts);
+  ok('GMMA：短期 6 条 + 长期 6 条',
+     gmmaFlat.short.length === 6 && gmmaFlat.long.length === 6);
+  const flatLong = api24.gmmaGroupStats(gmmaFlat.long, 80);
+  ok('GMMA：恒定序列长期组 min=max=avg=2',
+     !!flatLong && Math.abs(flatLong.min - 2) < 1e-9 && Math.abs(flatLong.max - 2) < 1e-9 &&
+     Math.abs(flatLong.avg - 2) < 1e-9, JSON.stringify(flatLong));
+  ok('GMMA：长期组不足 60 点时为 null', api24.gmmaGroupStats(gmmaFlat.long, 30) === null);
+  ok('GMMA：短期组第 15 点起有值',
+     api24.gmmaGroupStats(gmmaFlat.short, 14) === null &&
+     Math.abs(api24.gmmaGroupStats(gmmaFlat.short, 15).avg - 2) < 1e-9);
+  const bandStats = api24.computeGmmaBandStats(gmmaFlat, flatPts);
+  ok('GMMA：组带统计含 min/max/avg',
+     !!bandStats.short[80] && !!bandStats.long[80] &&
+     Math.abs(bandStats.long[80].avg - 2) < 1e-9);
+
+  /* ---- 形态分析：单边上行 → 买入；单边下行 → 卖出；恒定 → 观望 ---- */
+  const upPts = [];
+  for (let i = 1; i <= 120; i++) upPts.push({ ts: i, nav: Number((1 + i * 0.01).toFixed(6)) });
+  const aUp = api24.analyzeGmmaAt(upPts, api24.computeGMMA(upPts), upPts.length - 1);
+  ok('单边上行 → 建议买入', aUp.ok && aUp.action === 'buy', aUp.action + ' ' + aUp.label);
+  ok('建议附带动因（≥4 条理由）', aUp.reasons.length >= 4, 'n=' + aUp.reasons.length);
+  ok('买入建议含多头趋势理由', aUp.reasons.some((r) => r.indexOf('多头趋势') >= 0),
+     aUp.reasons.join(' | ').slice(0, 200));
+  ok('建议面板文案可构造（含免责说明）',
+     /function\s+gmmaAdviceHtml/.test(html) && html.indexOf('不构成投资建议') > html.indexOf('function gmmaAdviceHtml'));
+
+  const downPts = [];
+  for (let i = 1; i <= 120; i++) downPts.push({ ts: i, nav: Number((3 - i * 0.01).toFixed(6)) });
+  const aDown = api24.analyzeGmmaAt(downPts, api24.computeGMMA(downPts), downPts.length - 1);
+  ok('单边下行 → 建议卖出', aDown.ok && aDown.action === 'sell', aDown.action + ' ' + aDown.label);
+  ok('卖出建议含空头趋势理由', aDown.reasons.some((r) => r.indexOf('空头趋势') >= 0));
+
+  const aFlat = api24.analyzeGmmaAt(flatPts, gmmaFlat, flatPts.length - 1);
+  ok('横盘（无方向）→ 观望', aFlat.ok && aFlat.action === 'wait', aFlat.action + ' ' + aFlat.label);
+
+  const shortPts = flatPts.slice(0, 40);
+  const aShort = api24.analyzeGmmaAt(shortPts, api24.computeGMMA(shortPts), shortPts.length - 1);
+  ok('历史不足 60 个交易日 → 数据不足', !aShort.ok && aShort.action === 'none', aShort.label);
+  ok('无净值数据 → 数据不足不崩溃',
+     api24.analyzeGmmaAt([], api24.computeGMMA([]), 0).action === 'none');
+
+  /* ---- 金叉检测：先跌后涨的 V 形 ---- */
+  const vPts = [];
+  for (let i = 1; i <= 100; i++) vPts.push({ ts: i, nav: Number((2 - i * 0.01).toFixed(6)) });
+  for (let i = 1; i <= 20; i++) vPts.push({ ts: 100 + i, nav: Number((1 + i * 0.03).toFixed(6)) });
+  const crossesV = api24.findGmmaCrosses(vPts, api24.computeGMMA(vPts), 60, vPts.length - 1);
+  ok('V 形反转检测到金叉', crossesV.some((c) => c.type === 'golden'),
+     JSON.stringify(crossesV.slice(-2)));
+  ok('纯下行序列无金叉',
+     !api24.findGmmaCrosses(downPts, api24.computeGMMA(downPts), 60, downPts.length - 1)
+       .some((c) => c.type === 'golden'));
+}
+
+/* ============================================================
+   20. 迭代 v2.5：基金列表「顾比信号」列
+   ============================================================ */
+console.log('\n【迭代 v2.5】基金列表顾比信号列');
+ok('存在近 N 日交叉检测函数 gmmaRecentCross 与窗口常量',
+   /function\s+gmmaRecentCross\s*\(/.test(html) && /GMMA_SIGNAL_WINDOW\s*=\s*5\s*;/.test(html));
+ok('fundMetrics 输出 gmmaSignal（窗口取 GMMA_SIGNAL_WINDOW）',
+   /gmmaSignal:\s*null/.test(html) &&
+   /gmmaRecentCross\(fund,\s*GMMA_SIGNAL_WINDOW\)/.test(html));
+ok('表头含「顾比信号」列（位于最大回撤与操作之间）',
+   /<th[^>]*>顾比信号<\/th>/.test(html) &&
+   html.indexOf('顾比信号') > html.indexOf('成立以来最大回撤') &&
+   html.indexOf('顾比信号') < html.indexOf('>操作</th>'));
+ok('行单元格含顾比信号（data-label="顾比信号"）', /data-label="顾比信号"/.test(html));
+ok('信号徽章配色与文案（金叉红▲ / 死叉绿▼，涨红跌绿）',
+   /'金叉'\s*:\s*'死叉'/.test(html) && /'▲'\s*:\s*'▼'/.test(html) &&
+   /'var\(--up\)'\s*:\s*'var\(--down\)'/.test(html) && /'上穿'\s*:\s*'下穿'/.test(html));
+ok('无信号时留空 —（text-faint）',
+   /gmmaHtml\s*=\s*'<span style="color:var\(--text-faint\)">—<\/span>'/.test(html));
+
+if (api24) {
+  const src25 = src24 + '\n' + extract('gmmaRecentCross');
+  let api25 = null;
+  try {
+    api25 = new Function(src25 + `
+      return { computeGMMA, gmmaGroupStats, findGmmaCrosses, gmmaRecentCross };
+    `)();
+    ok('顾比信号函数可独立执行', true);
+  } catch (e) {
+    ok('顾比信号函数可独立执行', false, e.message);
+  }
+
+  if (api25) {
+    /* ---- 与全历史交叉检测保持一致：窗口 = 最后 5 个交易日 ---- */
+    const v25 = [];
+    for (let i = 1; i <= 100; i++) v25.push({ ts: i, nav: Number((2 - i * 0.01).toFixed(6)) });
+    for (let i = 1; i <= 20; i++) v25.push({ ts: 100 + i, nav: Number((1 + i * 0.03).toFixed(6)) });
+    const sigV = api25.gmmaRecentCross({ points: v25 }, 5);
+    const allV = api25.findGmmaCrosses(v25, api25.computeGMMA(v25), 60, v25.length - 1);
+    const winV = allV.filter((c) => c.idx >= v25.length - 5);
+    ok('信号 = 全历史交叉 ∩ 最后 5 个交易日（取最近一个）',
+       JSON.stringify(sigV) === JSON.stringify(winV.length ? winV[winV.length - 1] : null),
+       JSON.stringify(sigV));
+    const flat25 = [];
+    for (let i = 1; i <= 80; i++) flat25.push({ ts: i, nav: 2 });
+    ok('恒定序列无交叉 → null',
+       api25.gmmaRecentCross({ points: flat25 }, 5) === null);
+    ok('历史不足 61 个交易日 → null（不误报）',
+       api25.gmmaRecentCross({ points: flat25.slice(0, 40) }, 5) === null &&
+       api25.gmmaRecentCross({ points: flat25.slice(0, 60) }, 5) === null);
+    ok('空数据 / 缺 points → null 且不崩溃',
+       api25.gmmaRecentCross(null, 5) === null &&
+       api25.gmmaRecentCross({ points: [] }, 5) === null);
   }
 }
 

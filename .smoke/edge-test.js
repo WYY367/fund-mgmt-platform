@@ -270,14 +270,15 @@ function boot(opts) {
     });
     await wait(2500);
     const elapsed = Date.now() - t0;
+    const bootMs = elapsed - 2500; // 剔除测试固定等待，度量真实页面加载
     check('1000 条记录全部渲染', doc.querySelectorAll('#recBody tr').length === 1000,
           'rows=' + doc.querySelectorAll('#recBody tr').length);
     check('1200+ 净值点曲线已绘制',
           doc.querySelectorAll('#chartSvg path').length >= 2, 'points=' + pts.length);
-    check('渲染耗时 < 5 秒', elapsed < 5000, elapsed + 'ms');
+    check('页面加载耗时 < 5 秒（不含固定等待）', bootMs < 5000, bootMs + 'ms');
     const realErr = errors.filter((e) => !/Not implemented|Could not parse CSS/i.test(e));
     check('无运行时异常', realErr.length === 0, realErr.slice(0, 2).join(' | '));
-    console.log('     净值点数: ' + pts.length + '，渲染耗时: ' + elapsed + 'ms');
+    console.log('     净值点数: ' + pts.length + '，页面加载耗时(不含固定等待): ' + bootMs + 'ms');
     window.close();
   }
 

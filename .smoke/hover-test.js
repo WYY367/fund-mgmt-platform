@@ -1,5 +1,6 @@
 /**
  * 悬停交互专项测试 v1.3：十字准线 + 浮层（日期/净值/区间最大回撤/均线/买卖点）
+ * v2.4 增补：顾比均线默认模式（建议面板/组带/浮层组均值），经典 15/60 日均线切模式后回归。
  * 数据相对「今天」生成：70 个铺垫日 + 最近 4 个关键日（3 买 1 卖），
  * 保证「近1月」区间能覆盖关键日。
  * 用法：NODE_PATH=... node hover-test.js
@@ -134,12 +135,30 @@ const dom = new JSDOM(html, {
     }));
   }
 
-  /* ---- 1. 绘制层：均线 / 卖出标记 ---- */
+  /* ---- 0. 顾比均线（默认模式）：建议面板 + 组带 + 浮层 ---- */
+  console.log('\n【0】顾比均线（默认模式）');
+  let h = '';
+  const advice = doc.getElementById('gmmaAdvice');
+  check('建议面板存在且可见', !!advice && (advice.getAttribute('class') || '').indexOf('hidden') < 0,
+        advice ? advice.getAttribute('class') : 'null');
+  check('建议面板已渲染建议与理由（≥3 条）',
+        !!advice && advice.textContent.indexOf('操作建议') >= 0 && advice.querySelectorAll('li').length >= 3,
+        advice ? advice.textContent.slice(0, 140) : 'null');
+  check('建议面板含免责说明', !!advice && advice.textContent.indexOf('不构成投资建议') >= 0);
+  check('短期组带已绘制（青色）', !!doc.querySelector('#chartSvg path[fill="#22d3ee"]'));
+  check('长期组带已绘制（品红）', !!doc.querySelector('#chartSvg path[fill="#e879f9"]'));
+  move(MID_DATE);
+  await wait(50);
+  h = popup.innerHTML;
+  check('顾比模式下浮层显示短期组均值', h.indexOf('短期组均值') >= 0, h.slice(-260));
+  check('长期组窗口不足时显示 —', /长期组均值<\/span><span class="popup-val">—/.test(h), h.slice(-260));
+
+  /* ---- v2.4 起均线仅两档（顾比/关闭），经典模式已移除 ---- */
+  check('无经典模式按钮（15/60 日均线档已下线）',
+        !doc.querySelector('#maModeGroup .range-btn[data-ma="classic"]'));
+
+  /* ---- 1. 绘制层：买卖标记 ---- */
   console.log('\n【1】绘制层');
-  const ma15Path = doc.querySelector('#chartSvg path[stroke="#ffb020"]');
-  const ma60Path = doc.querySelector('#chartSvg path[stroke="#b57bff"]');
-  check('MA15 琥珀色虚线已绘制', !!ma15Path && (ma15Path.getAttribute('stroke-dasharray') || '') !== '');
-  check('MA60 紫色虚线已绘制', !!ma60Path && (ma60Path.getAttribute('stroke-dasharray') || '') !== '');
   check('卖出菱形标记已绘制', !!doc.querySelector('#chartSvg rect[data-marker]'));
   check('买入圆点标记 3 个', doc.querySelectorAll('#chartSvg circle[data-marker]').length === 3,
         'n=' + doc.querySelectorAll('#chartSvg circle[data-marker]').length);
@@ -149,14 +168,13 @@ const dom = new JSDOM(html, {
   move(MID_DATE);
   await wait(50);
   check('浮层已显示', popup.classList.contains('show'));
-  let h = popup.innerHTML;
+  h = popup.innerHTML;
   check('显示日期 ' + MID_DATE, h.indexOf(MID_DATE) >= 0, h.slice(0, 160));
   check('显示最大回撤行', h.indexOf('最大回撤') >= 0);
-  check('显示 15日均线行', h.indexOf('15日均线') >= 0);
-  check('显示 60日均线行', h.indexOf('60日均线') >= 0);
-  // 中段处 MA15 已成线；MA60 窗口（60 日）尚不足 → 显示 —（正确行为）
-  check('MA15 值有数值', /15日均线<\/span><span class="popup-val">\d/.test(h), h.slice(-260));
-  check('MA60 窗口不足时显示 —', /60日均线<\/span><span class="popup-val">—/.test(h), h.slice(-260));
+  // 顾比模式：中段处短期组已成组；长期组窗口（60 日）尚不足 → 显示 —（正确行为）
+  check('显示短期组均值行且有数值', /短期组均值<\/span><span class="popup-val">\d/.test(h), h.slice(-260));
+  check('长期组均值窗口不足时显示 —', /长期组均值<\/span><span class="popup-val">—/.test(h), h.slice(-260));
+  check('无经典均线行（15/60 日均线已下线）', h.indexOf('15日均线') < 0 && h.indexOf('60日均线') < 0);
 
   /* ---- 3. 区间回撤语义：区间高点处 0，跌 25% 处 -25% ---- */
   console.log('\n【3】区间回撤计算');
@@ -178,7 +196,7 @@ const dom = new JSDOM(html, {
   check('识别为卖出点', h.indexOf('卖出点') >= 0);
   check('显示卖出金额 ¥800', /¥800(\.00)?/.test(h), h.slice(0, 200));
   check('显示剩余份额', h.indexOf('剩余份额') >= 0);
-  check('含最大回撤与均线', h.indexOf('最大回撤') >= 0 && h.indexOf('15日均线') >= 0);
+  check('含最大回撤与均线读数', h.indexOf('最大回撤') >= 0 && h.indexOf('短期组均值') >= 0);
 
   /* ---- 5. 移出 / 离开 ---- */
   console.log('\n【5】移出与离开');
@@ -208,10 +226,22 @@ const dom = new JSDOM(html, {
   await wait(50);
   h = popup.innerHTML;
   check('近1月区间下回撤仍为 -25.00%', h.indexOf('-25.00%') >= 0, h.slice(-300));
-  check('近1月区间下 MA60 有数值', /60日均线<\/span><span class="popup-val">\d/.test(h), h.slice(-300));
+  check('近1月区间下长期组均值有数值', /长期组均值<\/span><span class="popup-val">\d/.test(h), h.slice(-300));
   const btnAll = doc.querySelector('.range-btn[data-range="all"]');
   btnAll.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(120);
+
+  /* ---- 7. 顾比模式回归：建议面板 + 浮层顾比行（恢复全部区间后） ---- */
+  console.log('\n【7】顾比模式回归');
+  const gmmaBtn = doc.querySelector('#maModeGroup .range-btn[data-ma="gmma"]');
+  gmmaBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(150);
+  check('顾比模式下建议面板保持显示',
+        !!advice && (advice.getAttribute('class') || '').indexOf('hidden') < 0);
+  move(MID_DATE);
+  await wait(50);
+  h = popup.innerHTML;
+  check('浮层显示短期组均值行', h.indexOf('短期组均值') >= 0, h.slice(-260));
 
   console.log('\n' + '='.repeat(58));
   console.log('  悬停交互测试：通过 ' + pass + ' 项，失败 ' + fail + ' 项');
