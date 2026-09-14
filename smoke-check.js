@@ -934,6 +934,102 @@ if (api24) {
 }
 
 /* ============================================================
+   21. 迭代 v2.6：今日待办提醒可忽略
+   ============================================================ */
+console.log('\n【迭代 v2.6】今日待办提醒可忽略');
+
+ok('state 含忽略记录 dismissedTodos（随记录持久化）', /dismissedTodos:\s*\{\}/.test(html));
+ok('序列化输出 dismissedTodos', /dismissedTodos:\s*state\.dismissedTodos/.test(html));
+ok('载入时读入并归一 dismissedTodos',
+   /state\.dismissedTodos\s*=\s*\(data\.dismissedTodos/.test(html) &&
+   /function\s+normalizeDismissedTodos\s*\(/.test(html));
+ok('存在待办标识与分组纯函数（todoKey / splitTodoItems / collectTodoItems）',
+   /function\s+todoKey\s*\(/.test(html) && /function\s+splitTodoItems\s*\(/.test(html) &&
+   /function\s+collectTodoItems\s*\(/.test(html));
+ok('收集逻辑已从渲染函数中拆出（渲染层只负责显示）',
+   /function\s+renderTodayZone\s*\([\s\S]{0,400}splitTodoItems\(collectTodoItems\(\)/.test(html));
+ok('存在忽略 / 全部忽略 / 恢复处理函数',
+   /function\s+dismissTodoItems\s*\(/.test(html) && /function\s+dismissOneTodo\s*\(/.test(html) &&
+   /function\s+dismissAllTodos\s*\(/.test(html) && /function\s+restoreTodoDismissals\s*\(/.test(html));
+ok('渲染层输出 × 按钮（带标识与情境指纹）',
+   /data-today-dismiss="'\s*\+\s*escapeHtml\(it\.key\)/.test(html) && /data-sig="/.test(html));
+ok('渲染层输出「全部忽略」入口', /data-today-dismiss="all"/.test(html));
+ok('渲染层输出「恢复」入口', /data-today-restore="1"/.test(html));
+ok('过期提醒带标识与情境指纹（指纹 = 该基金最新净值日期）',
+   /key:\s*todoKey\('stale',\s*f\.code\)/.test(html) && /sig:\s*String\(latest\.ts\)/.test(html));
+ok('全部被忽略时给出状态占位（待办区不空白）', /已忽略 ' \+ hidden\.length \+ ' 条提醒/.test(html));
+ok('事件委托分流：忽略 / 恢复 / 操作按钮',
+   /if \(dis === 'all'\) dismissAllTodos\(\);/.test(html) &&
+   /else dismissOneTodo\(dis, t\.getAttribute\('data-sig'\)\);/.test(html) &&
+   /restoreTodoDismissals\(\); return;/.test(html));
+ok('样式齐备（.todo-head / .todo-foot / .tip-x）',
+   /\.todo-head\s*\{/.test(html) && /\.todo-foot\s*\{/.test(html) && /\.tip-x\s*\{/.test(html));
+ok('无 emoji 图标（× 与恢复均为内联 SVG / 文字）', !/<button[^>]*>[^<]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(html));
+
+{
+  // 空态引导类（开始使用 / 还没有记录 / 一切正常）不带 key → 不可忽略
+  const collectSrc = extract('collectTodoItems') || '';
+  const guideSrc = collectSrc.slice(collectSrc.indexOf('// 4) 无数据时的引导'));
+  ok('空态引导类不可忽略（无 key 字段）', guideSrc.length > 0 && !/key:/.test(guideSrc));
+}
+
+{
+  const srcTodo = (extract('todoKey') || '') + '\n' + (extract('splitTodoItems') || '') +
+                  '\n' + (extract('normalizeDismissedTodos') || '');
+  let apiTodo = null;
+  try {
+    apiTodo = new Function(srcTodo +
+      '\nreturn { todoKey: todoKey, splitTodoItems: splitTodoItems, normalizeDismissedTodos: normalizeDismissedTodos };')();
+    ok('待办忽略相关函数可独立执行', true);
+  } catch (e) {
+    ok('待办忽略相关函数可独立执行', false, e.message);
+  }
+
+  if (apiTodo) {
+    ok('todoKey 生成稳定标识',
+       apiTodo.todoKey('stale', '110022') === 'stale:110022' &&
+       apiTodo.todoKey('corrupt') === 'corrupt');
+
+    const tItems = [
+      { key: 'stale:110022', sig: '1000', text: 'A' },
+      { key: 'stale:110026', sig: '1000', text: 'B' },
+      { key: 'dip:110022', sig: 'r9', text: 'C' },
+      { text: 'D' }                                  // 空态引导类：无 key
+    ];
+    const t1 = apiTodo.splitTodoItems(tItems, {});
+    ok('无忽略记录时全部显示', t1.shown.length === 4 && t1.hidden.length === 0);
+
+    const t2 = apiTodo.splitTodoItems(tItems, { 'stale:110022': '1000' });
+    ok('标识与指纹一致 → 该条被隐藏（不再常驻）',
+       t2.hidden.length === 1 && t2.hidden[0].text === 'A' && t2.shown.length === 3);
+
+    const t3 = apiTodo.splitTodoItems(tItems, { 'stale:110022': '2000' });
+    ok('指纹变化（净值已更新过）→ 旧忽略失效、重新显示',
+       t3.hidden.length === 0 && t3.shown.length === 4);
+
+    const t4 = apiTodo.splitTodoItems(tItems, { 'stale:110022': 1000 });
+    ok('指纹按字符串比较（容错数值型）', t4.hidden.length === 1);
+
+    const t5 = apiTodo.splitTodoItems(tItems, { 'nonav:999999': 'n1' });
+    ok('无关的历史忽略记录不影响其它条目渲染', t5.shown.length === 4);
+
+    ok('无 key 的条目永不参与忽略',
+       apiTodo.splitTodoItems([{ text: 'E' }, { text: 'F' }], { '': 'x', undefined: 'y' }).shown.length === 2);
+
+    ok('只隐藏匹配项、其余照常显示（单条忽略不影响他条）',
+       apiTodo.splitTodoItems(tItems, { 'stale:110022': '1000', 'dip:110022': 'r9' }).shown.length === 2);
+
+    const n1 = apiTodo.normalizeDismissedTodos({ a: 1, b: null, c: 'ok' });
+    ok('归一：只保留有效字符串键值',
+       JSON.stringify(n1) === JSON.stringify({ a: '1', c: 'ok' }), JSON.stringify(n1));
+    ok('归一：异常入参返回空对象',
+       Object.keys(apiTodo.normalizeDismissedTodos(null)).length === 0 &&
+       Object.keys(apiTodo.normalizeDismissedTodos('x')).length === 0 &&
+       Object.keys(apiTodo.normalizeDismissedTodos(['a'])).length === 0);
+  }
+}
+
+/* ============================================================
    汇总
    ============================================================ */
 console.log('\n' + '='.repeat(58));

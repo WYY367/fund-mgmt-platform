@@ -153,6 +153,7 @@ function rmrf(p) {
   const ok = await req('POST', '/api/store', {
     rev: curRev, records: legacy.records.slice(), currentCode: '110022',
     fundOrder: ['110022'], fundPinned: {}, fundSort: { key: '', dir: 'desc' },
+    dismissedTodos: { 'stale:110022': '1757520000000' },
   });
   check('正确 rev → 保存成功且 rev+1',
         ok.status === 200 && ok.json.ok === true && ok.json.rev === curRev + 1,
@@ -160,6 +161,32 @@ function rmrf(p) {
 
   const bad = await req('POST', '/api/store', { records: 'not-an-array' });
   check('records 非数组 → 400', bad.status === 400, 'status=' + bad.status);
+
+  /* ---------- 2c. 待办忽略记录（dismissedTodos） ---------- */
+  console.log('\n【2c】待办忽略记录持久化');
+  const g2 = await req('GET', '/api/store');
+  check('保存后能读回忽略记录（白名单未丢弃）',
+        !!(g2.json.data.dismissedTodos && g2.json.data.dismissedTodos['stale:110022'] === '1757520000000'),
+        JSON.stringify(g2.json.data.dismissedTodos));
+
+  const dirty = await req('POST', '/api/store', {
+    rev: g2.json.rev, records: legacy.records.slice(),
+    dismissedTodos: { 'stale:110022': 12345, 'dip:110022': null, '': 'x', 'notfull:110026': 'ok', n: 0 },
+  });
+  check('含脏值的忽略记录可保存（不报错）', dirty.status === 200, 'status=' + dirty.status);
+  const g3 = await req('GET', '/api/store');
+  const dt = g3.json.data.dismissedTodos || {};
+  check('脏值已归一：只保留有效字符串键值（null / 空键丢弃）',
+        dt['stale:110022'] === '12345' && dt['notfull:110026'] === 'ok' &&
+        dt['dip:110022'] === undefined && dt[''] === undefined && dt['n'] === '0',
+        JSON.stringify(dt));
+
+  const noDt = await req('POST', '/api/store', { rev: g3.json.rev, records: legacy.records.slice() });
+  const g4 = await req('GET', '/api/store');
+  check('缺省时回落为空对象（旧版数据兼容）',
+        noDt.status === 200 && !!g4.json.data.dismissedTodos &&
+        Object.keys(g4.json.data.dismissedTodos).length === 0,
+        JSON.stringify(g4.json.data.dismissedTodos));
 
   console.log('\n【2b】写入前快照');
   const backupDir = path.join(TMP, 'backups');

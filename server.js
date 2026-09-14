@@ -147,8 +147,23 @@ function emptyRecords() {
     fundOrder: [],
     fundPinned: {},
     fundSort: { key: '', dir: 'desc' },
+    dismissedTodos: {},
     savedAt: null,
   };
+}
+
+/** 待办提醒的消除记录：{ 待办标识: 情境指纹 }，只接受字符串键值，限量防膨胀 */
+function normalizeDismissedTodos(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return out;
+  const keys = Object.keys(obj).slice(0, 200);
+  for (const k of keys) {
+    if (!k || k.length > 80) continue;
+    const v = obj[k];
+    if (v === null || v === undefined) continue;
+    out[k] = String(v).slice(0, 80);
+  }
+  return out;
 }
 
 /** 规范化为前端可用的记录结构（容错，不抛错） */
@@ -162,6 +177,7 @@ function normalizeRecords(obj) {
     out.fundPinned = obj.fundPinned;
   }
   if (obj.fundSort && typeof obj.fundSort === 'object') out.fundSort = obj.fundSort;
+  out.dismissedTodos = normalizeDismissedTodos(obj.dismissedTodos);
   out.rev = typeof obj.rev === 'number' ? obj.rev : 0;
   out.savedAt = obj.savedAt || null;
   return out;

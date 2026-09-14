@@ -752,6 +752,77 @@ function wait(ms) {
   delModeBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(120);
 
+  console.log('\n【10】今日待办：忽略 / 全部忽略 / 恢复');
+
+  {
+    const zone = doc.getElementById('todayZone');
+    const dismissBtns = () => Array.from(zone.querySelectorAll('.tip-x[data-today-dismiss]'));
+    const tipCount = () => zone.querySelectorAll('.tip').length;
+
+    // 保证 ≥3 只基金 → ≥3 条「净值未更新」提醒，覆盖「单条忽略」与「全部忽略」两条路径
+    const extraCodes = ['110026', '519066', '161725'];
+    let guard = 0;
+    while (doc.querySelectorAll('#fundBody tr').length < 3 && guard < extraCodes.length) {
+      const fi = doc.getElementById('fundInput'), lb = doc.getElementById('btnLoadFund');
+      fi.value = extraCodes[guard++];
+      lb.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(500);
+    }
+    check('基金数量足够（≥3 只）', doc.querySelectorAll('#fundBody tr').length >= 3,
+          'funds=' + doc.querySelectorAll('#fundBody tr').length);
+
+    // 模拟数据最新净值为 2026-09-11，运行日已超过 3 天 → 必出现过期提醒
+    check('过期提醒渲染出忽略按钮', dismissBtns().length >= 3, 'x=' + dismissBtns().length);
+
+    const firstBtn = dismissBtns()[0];
+    const firstKey = firstBtn ? firstBtn.getAttribute('data-today-dismiss') : null;
+    const firstSig = firstBtn ? firstBtn.getAttribute('data-sig') : null;
+    check('忽略按钮带稳定标识与情境指纹（指纹 = 最新净值日期）',
+          /^stale:\d{6}$/.test(String(firstKey)) && !!firstSig, firstKey + ' / ' + firstSig);
+
+    if (firstBtn) {
+      const tipBefore = tipCount();
+      firstBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(300);
+      check('点击 × 后该条提醒从页面消失', tipCount() === tipBefore - 1, tipBefore + ' → ' + tipCount());
+      check('被忽略的条目不再渲染',
+            !zone.querySelector('.tip-x[data-today-dismiss="' + firstKey + '"]'));
+      check('忽略记录已写入服务端记录文件',
+            !!(storeRef.data && storeRef.data.dismissedTodos &&
+               storeRef.data.dismissedTodos[firstKey] === firstSig),
+            storeRef.data ? JSON.stringify(storeRef.data.dismissedTodos) : 'no store');
+      check('忽略后提示区给出恢复入口', !!zone.querySelector('[data-today-restore]'));
+    }
+
+    const allBtn = zone.querySelector('.todo-head [data-today-dismiss="all"]');
+    check('剩余两条以上时出现「全部忽略」', dismissBtns().length >= 2 && !!allBtn,
+          'rest=' + dismissBtns().length);
+
+    if (allBtn) {
+      allBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(300);
+      check('全部忽略后不再有可忽略项', dismissBtns().length === 0, 'x=' + dismissBtns().length);
+      check('全部忽略后提示区显示占位说明（不空白）',
+            /已忽略/.test(zone.textContent) && zone.innerHTML.trim().length > 0,
+            zone.textContent.trim().slice(0, 40));
+      check('全部忽略已持久化',
+            Object.keys(storeRef.data.dismissedTodos || {}).length >= 2,
+            JSON.stringify(storeRef.data.dismissedTodos));
+    }
+
+    const restoreBtn = zone.querySelector('[data-today-restore]');
+    check('忽略后存在恢复按钮', !!restoreBtn);
+    if (restoreBtn) {
+      restoreBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await wait(300);
+      check('恢复后提醒重新显示', dismissBtns().length >= 1, 'x=' + dismissBtns().length);
+      check('恢复后消除记录清空', Object.keys(storeRef.data.dismissedTodos || {}).length === 0,
+            JSON.stringify(storeRef.data.dismissedTodos));
+      check('忽略/恢复流程无 JS 异常',
+            errors.filter((e) => !/Not implemented|Could not parse CSS/i.test(e)).length === 0);
+    }
+  }
+
   console.log('\n' + '='.repeat(58));
   console.log('  运行时验证：通过 ' + pass + ' 项，失败 ' + fail + ' 项');
   console.log('='.repeat(58) + '\n');

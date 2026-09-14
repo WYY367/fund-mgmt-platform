@@ -430,6 +430,13 @@ th.num { text-align: right; }
 .tip-warn { background: rgba(255,176,32,.1); border: 1px solid rgba(255,176,32,.25); color: #f0cd8a; }
 .tip-danger { background: rgba(255,91,91,.1); border: 1px solid rgba(255,91,91,.26); color: #f5a8a8; }
 
+/* 今日待办：忽略 / 恢复 */
+.todo-head { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.todo-foot { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: -6px 0 14px; font-size: 12px; color: var(--text-faint); }
+.todo-foot .btn, .todo-head .btn { height: 24px; padding: 0 9px; font-size: 12px; }
+.tip-x { flex: 0 0 auto; height: 22px; padding: 0 6px; opacity: .55; }
+.tip-x:hover { opacity: 1; }
+
 /* Toast */
 .toast-layer {
   position: fixed; left: 50%; bottom: 26px;
@@ -974,6 +981,23 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+/**
+ * 待办提醒的消除记录归一：{ 待办标识: 情境指纹 }
+ * 只保留字符串键值并限量，避免异常数据撑大记录文件或污染渲染
+ */
+function normalizeDismissedTodos(obj) {
+  var out = {};
+  if (!obj || typeof obj !== 'object' || Object.prototype.toString.call(obj) === '[object Array]') return out;
+  var keys = Object.keys(obj).slice(0, 200);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = obj[k];
+    if (!k || v === null || v === undefined) continue;
+    out[k.slice(0, 80)] = String(v).slice(0, 80);
+  }
+  return out;
+}
+
 /* ================================================================
    二、全局状态（唯一数据源，渲染层只读）
    ================================================================ */
@@ -993,6 +1017,10 @@ var state = {
   fundOrder: [],
   fundPinned: {},
   fundSort: { key: '', dir: 'desc' },
+  // 今日待办的消除记录（持久化）：{ 待办标识: 情境指纹 }
+  // 仅当「标识 + 指纹」同时匹配时该条被隐藏；数据变化（如净值更新）会改写指纹，
+  // 旧的消除记录自动失效，条件再次成立时照常提示。
+  dismissedTodos: {},
   // 记录录入类型（买入/卖出，会话级）
   recType: 'buy',
   // 批量管理（会话级，不持久化）
@@ -1022,6 +1050,7 @@ var Store = (function () {
       fundOrder: state.fundOrder,
       fundPinned: state.fundPinned,
       fundSort: state.fundSort,
+      dismissedTodos: state.dismissedTodos,
       savedAt: Date.now()
     };
   }
@@ -1045,6 +1074,10 @@ var Store = (function () {
       var sk = data.fundSort.key;
       state.fundSort = { key: (sk === 'vsBuy' || sk === 'vsSell' || sk === 'mdd') ? sk : '', dir: data.fundSort.dir === 'asc' ? 'asc' : 'desc' };
     }
+    // 消除记录随数据一起换；旧版备份无该字段 → 视为空（不继承上一份数据的忽略状态）
+    state.dismissedTodos = (data.dismissedTodos && typeof data.dismissedTodos === 'object' &&
+                            !Array.isArray(data.dismissedTodos))
+      ? normalizeDismissedTodos(data.dismissedTodos) : {};
     if (typeof data.rev === 'number') state.rev = data.rev;
     return true;
   }
@@ -2017,18 +2050,44 @@ function renderSyncBadge() {
   text.textContent = map[state.syncState] || '本地模式';
 }
 
-/* ---------- 5.2 今日待办区（铁律 5） ---------- */
-function renderTodayZone() {
-  var zone = $('todayZone');
-  if (!zone) return;
-  zone.innerHTML = '';
+/* ---------- 5.2 今日待办区（铁律 5） ----------
+   每条待办用「标识 key + 情境指纹 sig」描述：
+     key 稳定标识某条提醒（如 stale:110022），sig 描述当前情境（如该基金最新净值日期）
+     state.dismissedTodos[key] === sig 时该条被忽略、不再渲染
+   情境一变（净值更新、又新增记录……）指纹即不同 → 旧忽略自动失效，
+   条件再次成立时照常提示，因此「忽略」不会永久掩盖问题。
+   todoKey / splitTodoItems / collectTodoItems 均为纯函数，只读 state。
+   空态引导类（开始使用 / 还没有记录 / 一切正常）不可忽略：它们不是提醒，
+   隐藏后待办区会永久空白。
+*/
 
+/** 纯函数：待办标识（无基金代码时为全局项） */
+function todoKey(kind, code) { return code ? kind + ':' + code : kind; }
+
+/** 纯函数：按忽略记录把待办项分成「显示」与「已忽略」两组 */
+function splitTodoItems(items, dismissed) {
+  var map = dismissed || {};
+  var shown = [], hidden = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (!it.key) { shown.push(it); continue; }        // 空态引导类不可忽略
+    var rec = map[it.key];
+    if (rec !== undefined && String(rec) === String(it.sig)) hidden.push(it);
+    else shown.push(it);
+  }
+  return { shown: shown, hidden: hidden };
+}
+
+/** 纯函数：收集当前全部待办项（含 key / sig，供忽略与恢复使用） */
+function collectTodoItems() {
   var items = [];
 
   // 0) 存储异常优先提示：损坏文件已被隔离保留，绝不用示例数据覆盖
   if (state.dataCorrupt) {
     items.push({
       level: 'danger',
+      key: 'corrupt',
+      sig: String(state.dataCorrupt),
       text: '记录文件损坏，已隔离保留为 ' + (typeof state.dataCorrupt === 'string' ? state.dataCorrupt : '备份文件') +
             '（未做任何覆盖）。如需恢复，可用该文件或「导入」备份；新记录会写入新的记录文件。',
       action: null
@@ -2037,6 +2096,8 @@ function renderTodayZone() {
   if (state.navCorrupt) {
     items.push({
       level: 'warn',
+      key: 'navCorrupt',
+      sig: String(state.navCorrupt),
       text: '净值缓存损坏（已隔离保留为 ' + (typeof state.navCorrupt === 'string' ? state.navCorrupt : '备份文件') +
             '）。净值可从上游重新拉取，点「加载净值」即可重建。',
       action: null
@@ -2054,6 +2115,9 @@ function renderTodayZone() {
     if (staleDays >= 3) {
       items.push({
         level: staleDays >= 7 ? 'danger' : 'warn',
+        // 指纹 = 该基金最新净值日期：净值一旦刷新即改写，过期提醒如再出现会重新提示
+        key: todoKey('stale', f.code),
+        sig: String(latest.ts),
         text: '《' + f.name + '》净值数据已 ' + staleDays + ' 天未更新（最新 ' + toDateStr(latest.ts) + '）',
         action: 'refresh',
         code: f.code,
@@ -2062,6 +2126,8 @@ function renderTodayZone() {
     } else if (f.full !== true) {
       items.push({
         level: 'warn',
+        key: todoKey('notfull', f.code),
+        sig: String(latest.ts),
         text: '《' + f.name + '》净值尚未升级为成立以来全部历史',
         action: 'refresh',
         code: f.code,
@@ -2078,6 +2144,9 @@ function renderTodayZone() {
     if (!state.funds[usedList[k]]) {
       items.push({
         level: 'warn',
+        // 指纹 = 该基金的记录条数：再添一笔记录视为新情境，重新提示
+        key: todoKey('nonav', usedList[k]),
+        sig: 'n' + state.records.filter(function (r) { return r.code === usedList[k]; }).length,
         text: '基金 ' + usedList[k] + ' 有买入记录，但净值数据尚未加载',
         action: 'load',
         code: usedList[k],
@@ -2099,6 +2168,9 @@ function renderTodayZone() {
     if (lastBuy && lastBuy.vsLatest != null && lastBuy.vsLatest <= -10) {
       items.push({
         level: 'info',
+        // 指纹 = 该笔买入的 id：再看跌不再重复打扰，下次买入后重新评估
+        key: todoKey('dip', state.currentCode),
+        sig: String(lastBuy.id || lastBuy.date),
         text: '《' + fund.name + '》现价较你最近一次买入（' + lastBuy.date + '）已' +
               fmtPct(lastBuy.vsLatest) + '，可考虑是否补仓',
         action: null
@@ -2132,12 +2204,47 @@ function renderTodayZone() {
     }
   }
 
+  return items;
+}
+
+/** 渲染今日待办区：显示未忽略的提醒，并提供忽略 / 全部忽略 / 恢复入口 */
+function renderTodayZone() {
+  var zone = $('todayZone');
+  if (!zone) return;
+  zone.innerHTML = '';
+
+  var split = splitTodoItems(collectTodoItems(), state.dismissedTodos);
+  var shown = split.shown, hidden = split.hidden;
+  var dismissible = 0;
+  for (var c = 0; c < shown.length; c++) if (shown[c].key) dismissible++;
+
+  // 全部被忽略时用一条状态提示占位，避免待办区永久空白，并给出恢复入口
+  var allIgnored = false;
+  if (!shown.length && hidden.length) {
+    allIgnored = true;
+    shown = [{
+      level: 'ok',
+      key: null,
+      sig: null,
+      restore: true,
+      text: '今日待办 ' + hidden.length + ' 条提醒已忽略（不再常驻页面）',
+      action: null
+    }];
+  }
+
   var levelCls = { danger: 'tip-danger', warn: 'tip-warn', info: 'tip-info', ok: 'tip-info' };
   var iconColor = { danger: '#ff5b5b', warn: '#ffb020', info: '#4f8cff', ok: '#26c281' };
 
   var html = '<div style="margin-bottom:16px">';
-  for (var n = 0; n < items.length; n++) {
-    var it = items[n];
+  // 两条以上可忽略项时，提供一键「全部忽略」
+  if (!allIgnored && dismissible >= 2) {
+    html += '<div class="todo-head">' +
+            '<button class="btn btn-sm btn-ghost" data-today-dismiss="all"' +
+            ' title="忽略当前全部提醒（不再常驻页面；数据更新后如再次异常会重新提示）">全部忽略</button>' +
+            '</div>';
+  }
+  for (var n = 0; n < shown.length; n++) {
+    var it = shown[n];
     html += '<div class="tip ' + (levelCls[it.level] || 'tip-info') + '">';
     html += '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' +
             (iconColor[it.level] || '#4f8cff') + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
@@ -2151,7 +2258,22 @@ function renderTodayZone() {
       html += '<button class="btn btn-sm btn-ghost" data-today-action="' + it.action +
               '" data-code="' + escapeHtml(it.code) + '">' + escapeHtml(it.btn) + '</button>';
     }
+    if (it.restore) {
+      html += '<button class="btn btn-sm btn-ghost" data-today-restore="1">恢复</button>';
+    }
+    if (it.key) {
+      html += '<button class="btn btn-sm btn-ghost tip-x" data-today-dismiss="' + escapeHtml(it.key) +
+              '" data-sig="' + escapeHtml(it.sig) + '" aria-label="忽略这条提醒"' +
+              ' title="忽略这条提醒（不再常驻页面；数据更新后如再次异常会重新提示）">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+              '<line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>' +
+              '</svg></button>';
+    }
     html += '</div>';
+  }
+  if (!allIgnored && hidden.length) {
+    html += '<div class="todo-foot">已忽略 ' + hidden.length + ' 条提醒' +
+            '<button class="btn btn-sm btn-ghost" data-today-restore="1">恢复</button></div>';
   }
   html += '</div>';
   zone.innerHTML = html;
@@ -3120,6 +3242,46 @@ function submitBulkRecords() {
    六、交互层：事件处理（改数据 → 调 refreshAll）
    ================================================================ */
 
+/* ---------- 今日待办：忽略 / 全部忽略 / 恢复 ----------
+   消除记录写入 state.dismissedTodos（随记录文件持久化），
+   刷新页面、重开服务后依然生效；指纹变化则自动失效。 */
+
+/** 忽略若干条提醒：写入「标识 → 指纹」后保存并重渲染 */
+function dismissTodoItems(list, tip) {
+  if (!list || !list.length) return;
+  var n = 0;
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].key) continue;                     // 空态引导类不可忽略
+    state.dismissedTodos[list[i].key] = String(list[i].sig);
+    n++;
+  }
+  if (!n) return;
+  Store.save().then(function () { refreshAll(); });
+  if (tip) toast(tip, 'ok');
+}
+
+/** 忽略单条（标识与指纹来自渲染出的按钮） */
+function dismissOneTodo(key, sig) {
+  if (!key || key === 'all') return;
+  dismissTodoItems([{ key: key, sig: sig }], '已忽略这条提醒');
+}
+
+/** 忽略当前全部可忽略的提醒 */
+function dismissAllTodos() {
+  var split = splitTodoItems(collectTodoItems(), state.dismissedTodos);
+  if (!split.shown.length) return;
+  dismissTodoItems(split.shown, '已忽略 ' + split.shown.length + ' 条提醒');
+}
+
+/** 恢复：清掉当前处于忽略状态的消除记录 */
+function restoreTodoDismissals() {
+  var split = splitTodoItems(collectTodoItems(), state.dismissedTodos);
+  if (!split.hidden.length) return;
+  for (var i = 0; i < split.hidden.length; i++) delete state.dismissedTodos[split.hidden[i].key];
+  Store.save().then(function () { refreshAll(); });
+  toast('已恢复 ' + split.hidden.length + ' 条提醒', 'ok');
+}
+
 /**
  * 图表悬停交互：十字准线 + 跟随浮层
  * 普通点显示 日期 / 单位净值 / 较昨日 / 最大回撤；
@@ -3995,13 +4157,26 @@ function bindEvents() {
     btnBulkSubmit.addEventListener('click', submitBulkRecords);
   }
 
-  /* ---- 今日待办区的操作按钮 ---- */
+  /* ---- 今日待办区的操作 / 忽略 / 恢复按钮 ---- */
   var todayZone = $('todayZone');
   if (todayZone) {
     todayZone.addEventListener('click', function (e) {
       var t = e.target;
-      while (t && t !== todayZone && !t.getAttribute('data-today-action')) t = t.parentNode;
-      if (!t || t === todayZone) return;
+      while (t && t !== todayZone && t.getAttribute &&
+             !t.getAttribute('data-today-action') &&
+             !t.getAttribute('data-today-dismiss') &&
+             !t.getAttribute('data-today-restore')) t = t.parentNode;
+      if (!t || t === todayZone || !t.getAttribute) return;
+
+      // 忽略 / 恢复优先于操作按钮（两者不会同时出现在一个按钮上）
+      var dis = t.getAttribute('data-today-dismiss');
+      if (dis) {
+        if (dis === 'all') dismissAllTodos();
+        else dismissOneTodo(dis, t.getAttribute('data-sig'));
+        return;
+      }
+      if (t.getAttribute('data-today-restore')) { restoreTodoDismissals(); return; }
+
       var act = t.getAttribute('data-today-action');
       var code = t.getAttribute('data-code');
       if (act === 'refresh') {
