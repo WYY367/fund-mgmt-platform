@@ -878,11 +878,11 @@ if (api24) {
 }
 
 /* ============================================================
-   20. 迭代 v2.5：基金列表「顾比信号」列
+   20. 迭代 v2.5：基金列表「顾比信号」列（v2.7 改为窗口 10 日 + 计数汇总）
    ============================================================ */
 console.log('\n【迭代 v2.5】基金列表顾比信号列');
 ok('存在近 N 日交叉检测函数 gmmaRecentCross 与窗口常量',
-   /function\s+gmmaRecentCross\s*\(/.test(html) && /GMMA_SIGNAL_WINDOW\s*=\s*5\s*;/.test(html));
+   /function\s+gmmaRecentCross\s*\(/.test(html) && /GMMA_SIGNAL_WINDOW\s*=\s*10\s*;/.test(html));
 ok('fundMetrics 输出 gmmaSignal（窗口取 GMMA_SIGNAL_WINDOW）',
    /gmmaSignal:\s*null/.test(html) &&
    /gmmaRecentCross\(fund,\s*GMMA_SIGNAL_WINDOW\)/.test(html));
@@ -892,13 +892,14 @@ ok('表头含「顾比信号」列（位于最大回撤与操作之间）',
    html.indexOf('顾比信号') < html.indexOf('>操作</th>'));
 ok('行单元格含顾比信号（data-label="顾比信号"）', /data-label="顾比信号"/.test(html));
 ok('信号徽章配色与文案（金叉红▲ / 死叉绿▼，涨红跌绿）',
-   /'金叉'\s*:\s*'死叉'/.test(html) && /'▲'\s*:\s*'▼'/.test(html) &&
-   /'var\(--up\)'\s*:\s*'var\(--down\)'/.test(html) && /'上穿'\s*:\s*'下穿'/.test(html));
+   /\?\s*'金叉'\s*:\s*'死叉'/.test(html) && /\?\s*'▲'\s*:\s*'▼'/.test(html) &&
+   /\?\s*'var\(--up\)'\s*:\s*'var\(--down\)'/.test(html) &&
+   /\?\s*'上穿'\s*:\s*'下穿'/.test(html));
 ok('无信号时留空 —（text-faint）',
    /gmmaHtml\s*=\s*'<span style="color:var\(--text-faint\)">—<\/span>'/.test(html));
 
 if (api24) {
-  const src25 = src24 + '\n' + extract('gmmaRecentCross');
+  const src25 = src24 + '\n' + extract('gmmaRecentCross') + '\nvar GMMA_SIGNAL_WINDOW = 10;';
   let api25 = null;
   try {
     api25 = new Function(src25 + `
@@ -910,26 +911,97 @@ if (api24) {
   }
 
   if (api25) {
-    /* ---- 与全历史交叉检测保持一致：窗口 = 最后 5 个交易日 ---- */
+    /* ---- 数据 A：跌 100 点后以 0.015/日 上涨 → 金叉落在最后 10 个交易日窗口内 ---- */
     const v25 = [];
     for (let i = 1; i <= 100; i++) v25.push({ ts: i, nav: Number((2 - i * 0.01).toFixed(6)) });
-    for (let i = 1; i <= 20; i++) v25.push({ ts: 100 + i, nav: Number((1 + i * 0.03).toFixed(6)) });
-    const sigV = api25.gmmaRecentCross({ points: v25 }, 5);
+    for (let i = 1; i <= 20; i++) v25.push({ ts: 100 + i, nav: Number((1 + i * 0.015).toFixed(6)) });
+    const sigV = api25.gmmaRecentCross({ points: v25 }, 10);
     const allV = api25.findGmmaCrosses(v25, api25.computeGMMA(v25), 60, v25.length - 1);
-    const winV = allV.filter((c) => c.idx >= v25.length - 5);
-    ok('信号 = 全历史交叉 ∩ 最后 5 个交易日（取最近一个）',
-       JSON.stringify(sigV) === JSON.stringify(winV.length ? winV[winV.length - 1] : null),
+    const winV = allV.filter((c) => c.idx >= v25.length - 10);
+    const expGolden = winV.filter((c) => c.type === 'golden').length;
+    const expDeath = winV.filter((c) => c.type === 'death').length;
+    ok('信号 = 全历史交叉 ∩ 最后 10 个交易日（次数 + 最近一次）',
+       !!sigV && sigV.golden === expGolden && sigV.death === expDeath &&
+       sigV.count === winV.length &&
+       JSON.stringify(sigV.last) === JSON.stringify(winV.length ? winV[winV.length - 1] : null),
        JSON.stringify(sigV));
+    ok('窗口内单次金叉：golden=1 / death=0 / count=1',
+       winV.length === 1 && !!sigV && sigV.golden === 1 && sigV.death === 0 && sigV.count === 1,
+       'win=' + JSON.stringify(winV));
+
+    /* ---- 按类型的最近一次信号日期 ---- */
+    {
+      const lastG = winV.filter((c) => c.type === 'golden');
+      const lastD = winV.filter((c) => c.type === 'death');
+      ok('各类型最近一次日期正确（未出现的类型为 null）',
+         !!sigV &&
+         sigV.lastGolden === (lastG.length ? lastG[lastG.length - 1].ts : null) &&
+         sigV.lastDeath === (lastD.length ? lastD[lastD.length - 1].ts : null),
+         sigV ? ('g=' + sigV.lastGolden + ' d=' + sigV.lastDeath) : 'null');
+    }
+
+    /* ---- 数据 B：同形状但涨幅更陡 → 交叉落在窗口之外 → null（不误报） ---- */
+    {
+      const vOut = [];
+      for (let i = 1; i <= 100; i++) vOut.push({ ts: i, nav: Number((2 - i * 0.01).toFixed(6)) });
+      for (let i = 1; i <= 20; i++) vOut.push({ ts: 100 + i, nav: Number((1 + i * 0.03).toFixed(6)) });
+      const allOut = api25.findGmmaCrosses(vOut, api25.computeGMMA(vOut), 60, vOut.length - 1);
+      ok('交叉确实存在但落在窗口外 → 返回 null（窗口语义正确）',
+         allOut.length > 0 && allOut.every((c) => c.idx < vOut.length - 10) &&
+         api25.gmmaRecentCross({ points: vOut }, 10) === null,
+         JSON.stringify(allOut));
+    }
+
+    /* ---- 数据 C：平坦基底 + 周期 6 震荡 → 窗口内同时出现金叉与死叉 ---- */
+    {
+      const vBoth = [];
+      for (let i = 1; i <= 100; i++) vBoth.push({ ts: i, nav: 1 });
+      for (let i = 1; i <= 30; i++) {
+        vBoth.push({ ts: 100 + i, nav: Number((1 + 0.03 * Math.sin(2 * Math.PI * i / 6)).toFixed(6)) });
+      }
+      const sB = api25.gmmaRecentCross({ points: vBoth }, 10);
+      const wB = api25.findGmmaCrosses(vBoth, api25.computeGMMA(vBoth), 60, vBoth.length - 1)
+        .filter((c) => c.idx >= vBoth.length - 10);
+      const gB = wB.filter((c) => c.type === 'golden').length;
+      const dB = wB.filter((c) => c.type === 'death').length;
+      ok('窗口内金叉与死叉同时存在 → 两类计数各自正确（可并列渲染）',
+         gB > 0 && dB > 0 && !!sB &&
+         sB.golden === gB && sB.death === dB && sB.count === gB + dB,
+         'g=' + gB + ' d=' + dB + ' sig=' + JSON.stringify(sB));
+      ok('窗口内多类型时 last 取时间上最近的一次',
+         !!sB && sB.last.idx === wB[wB.length - 1].idx,
+         sB ? JSON.stringify(sB.last) : 'null');
+    }
+
     const flat25 = [];
     for (let i = 1; i <= 80; i++) flat25.push({ ts: i, nav: 2 });
     ok('恒定序列无交叉 → null',
-       api25.gmmaRecentCross({ points: flat25 }, 5) === null);
+       api25.gmmaRecentCross({ points: flat25 }, 10) === null);
     ok('历史不足 61 个交易日 → null（不误报）',
-       api25.gmmaRecentCross({ points: flat25.slice(0, 40) }, 5) === null &&
-       api25.gmmaRecentCross({ points: flat25.slice(0, 60) }, 5) === null);
+       api25.gmmaRecentCross({ points: flat25.slice(0, 40) }, 10) === null &&
+       api25.gmmaRecentCross({ points: flat25.slice(0, 60) }, 10) === null);
     ok('空数据 / 缺 points → null 且不崩溃',
-       api25.gmmaRecentCross(null, 5) === null &&
-       api25.gmmaRecentCross({ points: [] }, 5) === null);
+       api25.gmmaRecentCross(null, 10) === null &&
+       api25.gmmaRecentCross({ points: [] }, 10) === null);
+    ok('窗口天数非法（0 / 负数 / 非数值）→ null',
+       api25.gmmaRecentCross({ points: flat25 }, 0) === null &&
+       api25.gmmaRecentCross({ points: flat25 }, -3) === null &&
+       api25.gmmaRecentCross({ points: flat25 }, 'x') === null);
+
+    /* ---- 锯齿行情：count = 窗口内交叉总数（不是全历史） ---- */
+    {
+      const zig = [];
+      for (let i = 1; i <= 120; i++) {
+        zig.push({ ts: i, nav: Number((1.5 + (i % 2 === 0 ? 0.15 : -0.15) + i * 0.0005).toFixed(6)) });
+      }
+      const zSig = api25.gmmaRecentCross({ points: zig }, 10);
+      const zAll = api25.findGmmaCrosses(zig, api25.computeGMMA(zig), 60, zig.length - 1);
+      const zWin = zAll.filter((c) => c.idx >= zig.length - 10);
+      ok('锯齿行情：窗口内多次交叉时 count = 窗口内交叉总数',
+         (zWin.length === 0 && zSig === null) ||
+         (!!zSig && zSig.count === zWin.length && zSig.golden + zSig.death === zWin.length),
+         'win=' + zWin.length + ' sig=' + JSON.stringify(zSig));
+    }
   }
 }
 
@@ -1026,6 +1098,410 @@ ok('无 emoji 图标（× 与恢复均为内联 SVG / 文字）', !/<button[^>]*
        Object.keys(apiTodo.normalizeDismissedTodos(null)).length === 0 &&
        Object.keys(apiTodo.normalizeDismissedTodos('x')).length === 0 &&
        Object.keys(apiTodo.normalizeDismissedTodos(['a'])).length === 0);
+  }
+}
+
+/* ============================================================
+   22. 迭代 v2.7：顾比信号列改为「窗口 10 日 + 交叉计数」
+   ============================================================ */
+console.log('\n【迭代 v2.7】顾比信号窗口 10 日 + 交叉计数');
+
+ok('窗口常量由 5 改为 10', /var\s+GMMA_SIGNAL_WINDOW\s*=\s*10\s*;/.test(html) && !/GMMA_SIGNAL_WINDOW\s*=\s*5\s*;/.test(html));
+ok('返回值由单个交叉改为计数汇总 { golden, death, count, last }',
+   /golden:\s*golden/.test(html) && /death:\s*death/.test(html) &&
+   /count:\s*golden\s*\+\s*death/.test(html) && /last:\s*crosses\[crosses\.length\s*-\s*1\]/.test(html));
+ok('补按类型的最近日期（lastGolden / lastDeath）',
+   /lastGolden:\s*lastGolden/.test(html) && /lastDeath:\s*lastDeath/.test(html));
+ok('列表渲染：金叉 / 死叉各自独立成块，同时存在时以 · 分隔',
+   /gs\.golden\s*>\s*0/.test(html) && /gs\.death\s*>\s*0/.test(html) &&
+   /gParts\.join\(\s*' <span style="color:var\(--text-faint\)">·<\/span> '\s*\)/.test(html));
+ok('同类型 >1 次时文案后标 ×N（仅 1 次不标数字）',
+   /\?\s*' ×'\s*\+\s*num\s*:\s*''/.test(html));
+ok('悬停分别给出该类型次数与最近一次信号日期',
+   /最近 '\s*\+\s*GMMA_SIGNAL_WINDOW\s*\+\s*' 个交易日内'\s*\+\s*text/.test(html) &&
+   /最近一次 '\s*\+\s*dateStr/.test(html));
+ok('toDateStr 空值容错（null / 空串返回空串，避免 Invalid Date 文案）',
+   /function\s+toDateStr\s*\(ts\)\s*\{\s*if\s*\(ts\s*==\s*null\s*\|\|\s*ts\s*===\s*''\)\s*return\s*'';/.test(html));
+ok('列头 title 同步为「过去 10 个交易日」并说明并列与 ×N',
+   /过去 10 个交易日内出现顾比均线交叉/.test(html) && /两类可并列显示/.test(html));
+
+{
+  // 纯函数重放：toDateStr 空值容错
+  const td = new Function('return ' + (extract('toDateStr') || 'function(){return "MISS";}'))();
+  ok('toDateStr(null) → 空串', td(null) === '');
+  ok('toDateStr("") → 空串', td('') === '');
+  ok('toDateStr(undefined) → 空串', td(undefined) === '');
+  ok('toDateStr 正常值仍返回 YYYY-MM-DD', /^\d{4}-\d{2}-\d{2}$/.test(td(new Date(2026, 8, 14).getTime())));
+}
+
+/* ============================================================
+   23. 迭代 v2.8：打开页面自动刷新净值
+   ============================================================ */
+console.log('\n【迭代 v2.8】打开页面自动刷新净值');
+
+ok('存在交易日判定纯函数 isTradingDayTs', /function\s+isTradingDayTs\s*\(/.test(html));
+ok('存在目标净值日推算纯函数 expectedNavTs', /function\s+expectedNavTs\s*\(/.test(html));
+ok('存在自动刷新计划纯函数 planAutoNavRefresh', /function\s+planAutoNavRefresh\s*\(/.test(html));
+ok('存在自动刷新调度 autoRefreshNav', /function\s+autoRefreshNav\s*\(/.test(html));
+ok('公布时段常量为 20 点', /var\s+NAV_PUBLISH_HOUR\s*=\s*20\s*;/.test(html));
+ok('自动刷新串行且静默（不切当前基金、失败不重试）',
+   /loadFundNav\(code,\s*true,\s*true\)/.test(html) && /autoRefreshTried\[code\]\s*=\s*true/.test(html));
+ok('boot() 中调用自动刷新（有缓存与需加载两条路径都覆盖）',
+   (html.match(/autoRefreshNav\(\)/g) || []).length >= 3);
+
+{
+  // 真实重放：抽出三个纯函数在沙箱里跑，验证判定边界
+  const blockSrc = html.slice(
+    html.indexOf('var NAV_PUBLISH_HOUR'),
+    html.indexOf('function autoRefreshNav')
+  );
+  const api = new Function(
+    'var MS_DAY = 24 * 3600 * 1000;\n' +
+    'function toDateStr(ts){if(ts==null||ts===\'\')return \'\';var d=new Date(ts);var m=d.getMonth()+1,day=d.getDate();' +
+    'return d.getFullYear()+\'-\'+(m<10?\'0\'+m:m)+\'-\'+(day<10?\'0\'+day:day);}\n' +
+    'function dateStrToTs(s){var p=String(s).split(\'-\');var d=new Date(+p[0],+p[1]-1,+p[2]);return d.getTime();}\n' +
+    'function latestPoint(p){return p&&p.length?p[p.length-1]:null;}\n' +
+    'var autoRefreshTried = {};\n' +
+    blockSrc +
+    '\nreturn { isTradingDayTs: isTradingDayTs, expectedNavTs: expectedNavTs,' +
+    ' planAutoNavRefresh: planAutoNavRefresh,' +
+    ' resetTried: function(){ autoRefreshTried = {}; },' +
+    ' markTried: function(c){ autoRefreshTried[c] = true; } };'
+  )();
+
+  function dsTs(s) { const p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); }
+  const at = (dateStr, hour) => dsTs(dateStr) + hour * 3600 * 1000;
+  const fundAt = (code, dateStr) => ({ [code]: { code: code, points: [{ ts: dsTs(dateStr), nav: 1 }] } });
+
+  /* ---- 交易日判定（2026-09-14 周一 / 09-11 周五） ---- */
+  ok('交易日判定：周一是交易日', api.isTradingDayTs(at('2026-09-14', 10)));
+  ok('交易日判定：周五是交易日', api.isTradingDayTs(at('2026-09-11', 10)));
+  ok('交易日判定：周六不是交易日', !api.isTradingDayTs(at('2026-09-12', 10)));
+  ok('交易日判定：周日不是交易日', !api.isTradingDayTs(at('2026-09-13', 10)));
+
+  /* ---- 目标净值日推算 ---- */
+  ok('周一 21:00 → 目标为当天',
+     api.expectedNavTs(at('2026-09-14', 21)) === dsTs('2026-09-14'));
+  ok('周一 10:00 → 目标为上周五（今天净值还没出，不判为过期）',
+     api.expectedNavTs(at('2026-09-14', 10)) === dsTs('2026-09-11'));
+  ok('周一 19:00 → 仍目标上周五（公布时段未到）',
+     api.expectedNavTs(at('2026-09-14', 19)) === dsTs('2026-09-11'));
+  ok('周一 20:00 → 进入公布时段，目标为当天',
+     api.expectedNavTs(at('2026-09-14', 20)) === dsTs('2026-09-14'));
+  ok('周五 21:00 → 目标为当天（周末不再反复请求）',
+     api.expectedNavTs(at('2026-09-11', 21)) === dsTs('2026-09-11'));
+  ok('周五 10:00 → 目标为周四',
+     api.expectedNavTs(at('2026-09-11', 10)) === dsTs('2026-09-10'));
+  ok('周六 → 结论不明确（null）', api.expectedNavTs(at('2026-09-12', 21)) === null);
+  ok('周日 → 结论不明确（null）', api.expectedNavTs(at('2026-09-13', 21)) === null);
+
+  /* ---- 自动刷新计划 ---- */
+  api.resetTried();
+  ok('缓存已是最新 → 不拉取',
+     api.planAutoNavRefresh(fundAt('110022', '2026-09-14'), at('2026-09-14', 21)).length === 0);
+  ok('缓存落后一天 → 需拉取',
+     JSON.stringify(api.planAutoNavRefresh(fundAt('110022', '2026-09-11'), at('2026-09-14', 21))) === '["110022"]');
+  ok('周一上午缓存含上周五 → 认为最新，不拉取',
+     api.planAutoNavRefresh(fundAt('110022', '2026-09-11'), at('2026-09-14', 10)).length === 0);
+  ok('周末不拉取（哪怕缓存很旧）',
+     api.planAutoNavRefresh(fundAt('110022', '2026-09-01'), at('2026-09-13', 21)).length === 0);
+  ok('无净值数据的基金不参与（交给 boot 的静默加载）',
+     api.planAutoNavRefresh({ '110022': { code: '110022', points: [] } }, at('2026-09-14', 21)).length === 0);
+  ok('入参为空时不报错', api.planAutoNavRefresh(null, at('2026-09-14', 21)).length === 0);
+
+  {
+    const many = {};
+    for (let i = 0; i < 30; i++) {
+      many['10000' + i] = { code: '10000' + i, points: [{ ts: dsTs('2026-09-11'), nav: 1 }] };
+    }
+    ok('单次最多拉取 20 只（防打爆上游）',
+       api.planAutoNavRefresh(many, at('2026-09-14', 21)).length === 20);
+  }
+
+  /* ---- 会话级去重 ---- */
+  api.resetTried();
+  api.markTried('110022');
+  ok('本次会话已尝试过的基金不再列入计划',
+     api.planAutoNavRefresh(fundAt('110022', '2026-09-11'), at('2026-09-14', 21)).length === 0);
+}
+
+/* ============================================================
+   24. 修补：未加载净值的提醒文案按实际记录类型区分
+   ============================================================ */
+console.log('\n【修补】「有记录但未加载净值」提醒文案按实际记录类型区分');
+
+ok('文案不再写死「有买入记录，但净值数据尚未加载」', !/有买入记录，但净值数据尚未加载/.test(html));
+ok('记录按基金分别统计买入 / 卖出条数',
+   /recStat\[rCode\]\s*=\s*\{\s*buy:\s*0,\s*sell:\s*0\s*\}/.test(html) &&
+   /type === 'sell'\) st\.sell\+\+; else st\.buy\+\+/.test(html));
+ok('文案类型名由纯函数给出', /var kindText = recordKindText\(st2\)/.test(html));
+ok('情境指纹仍为该基金记录条数', /sig: 'n' \+ \(st2\.buy \+ st2\.sell\)/.test(html));
+
+{
+  // 纯函数重放：记录类型名三分支 + 容错
+  const rkt = new Function('return ' + (extract('recordKindText') || 'function(){return "MISS";}'))();
+  ok('只有买入记录 → 「买入记录」', rkt({ buy: 2, sell: 0 }) === '买入记录');
+  ok('只有卖出记录 → 「卖出记录」', rkt({ buy: 0, sell: 3 }) === '卖出记录');
+  ok('买卖兼有 → 「买卖记录」', rkt({ buy: 1, sell: 1 }) === '买卖记录');
+  ok('无记录 / 异常入参 → 「记录」且不崩溃',
+     rkt({ buy: 0, sell: 0 }) === '记录' && rkt(null) === '记录' && rkt(undefined) === '记录');
+}
+
+/* ============================================================
+   25. 删除待办区的「《X》还没有买卖记录」引导
+   ============================================================ */
+console.log('\n【删除】待办区「《X》还没有买卖记录」引导');
+
+ok('待办区不再产出「还没有买卖记录」文案', !/还没有买卖记录，在下方添加第一笔/.test(html));
+ok('待办区不再按「当前基金是否有记录」分支', !/var hasRec = state\.records\.some/.test(html));
+ok('记录表自身空态文案保留（在上方添加第一笔，与待办区无关）',
+   /还没有买卖记录，在上方添加第一笔/.test(html));
+ok('无待办且已选基金时显示「一切正常」',
+   /\} else \{\s*items\.push\(\{\s*level: 'ok',\s*text: '一切正常，没有需要处理的异常'/.test(html));
+
+/* ============================================================
+   26. 迭代 v2.9：我的基金表格新增「净值日期」列
+   ============================================================ */
+console.log('\n【迭代 v2.9】基金列表「净值日期」列');
+
+{
+  // --- 静态结构 ---
+  const fundHeadHtml = (html.match(/<thead[\s\S]*?<\/thead>/) || [''])[0];
+  const fundBodyHtml = (html.slice(html.indexOf('id="fundBody"'), html.indexOf('</tbody>')) || '');
+  const thCount = (fundHeadHtml.match(/<th[\s>]/g) || []).length;
+  const staticTdCount = (fundBodyHtml.match(/<td[\s>]/g) || []).length;
+
+  ok('表头含「净值日期」列（位于笔数与相较于前次买入之间）',
+     /<th[^>]*>净值日期<\/th>/.test(html) &&
+     html.indexOf('净值日期') > html.indexOf('>笔数</th>') &&
+     html.indexOf('>净值日期</th>') < html.indexOf('相较于前次买入'));
+  ok('列头 title 说明口径（最新净值日 / 未加载留空）',
+     /title="该基金净值数据更新到的最后一个交易日/.test(html) && /未加载净值时留空/.test(html));
+  ok('行单元格含净值日期（data-label="净值日期"）', /data-label="净值日期"/.test(html));
+  ok('未加载净值时留空（— 占位，不显示空串）',
+     /if \(!m\.navDate\) \{\s*navDateHtml = '<span style="color:var\(--text-faint\)">—<\/span>';/.test(html));
+  ok('净值日期用等宽数字，避免列内跳动', /font-variant-numeric:tabular-nums/.test(html));
+  ok('悬停给出「净值数据截至 …」说明', /'净值数据截至 ' \+ m\.navDate/.test(html));
+  ok('列头与初始占位行列数一致（各 ' + thCount + ' 列）',
+     thCount === 9 && staticTdCount === 9, 'th=' + thCount + ' td=' + staticTdCount);
+  ok('净值日期由 fundMetrics 给出（latestPoint + toDateStr）',
+     /out\.navTs = latest \? latest\.ts : null/.test(html) &&
+     /out\.navDate = latest \? toDateStr\(latest\.ts\) : ''/.test(html));
+  ok('净值日期列不参与表头排序（保持拖拽/数值排序语义不变）',
+     /<th class="num" style="width: 108px;[^>]*>净值日期<\/th>/.test(html) &&
+     !/data-sort="navDate"/.test(html));
+}
+
+{
+  // --- 真实重放：抽出 fundMetrics，用桩函数验证「净值日期」口径与容错 ---
+  const STUB =
+    'var MS_DAY = 24 * 3600 * 1000;\n' +
+    'var NAV_PUBLISH_HOUR = 20;\n' +
+    'var GMMA_SIGNAL_WINDOW = 10;\n' +
+    'var state = { funds: {}, records: [] };\n' +
+    'function latestPoint(p){return p&&p.length?p[p.length-1]:null;}\n' +
+    'function toDateStr(ts){if(ts==null||ts==="")return "";var d=new Date(ts);var m=d.getMonth()+1,day=d.getDate();' +
+    'return d.getFullYear()+"-"+(m<10?"0"+m:m)+"-"+(day<10?"0"+day:day);}\n' +
+    'function dateStrToTs(s){var p=String(s).split("-");var d=new Date(+p[0],+p[1]-1,+p[2]);return d.getTime();}\n' +
+    'function enrichRecords(){return [];}\n' +
+    'function latestVsLastAction(){return { vsBuy: null, vsSell: null, buyDate: null, sellDate: null };}\n' +
+    'function computeDrawdownMap(){return {};}\n' +
+    'function gmmaRecentCross(){return null;}\n' +
+    (extract('isTradingDayTs') || '') + '\n' +
+    (extract('expectedNavTs') || '') + '\n' +
+    (extract('dueNavTs') || '') + '\n';
+
+  let fm = null;
+  try {
+    fm = new Function(STUB + (extract('fundMetrics') || 'function fundMetrics(){return "MISS";}') +
+      '\nreturn { fundMetrics: fundMetrics, setState: function(s){ state = s; } };')();
+    ok('fundMetrics 可独立执行', typeof fm.fundMetrics === 'function');
+  } catch (e) {
+    ok('fundMetrics 可独立执行', false, e.message);
+  }
+
+  if (fm) {
+    const dsTs = (s) => { const p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); };
+
+    fm.setState({
+      funds: { '110022': { code: '110022', name: 'A', points: [
+        { ts: dsTs('2026-09-01'), nav: 1 }, { ts: dsTs('2026-09-11'), nav: 1.1 }] } },
+      records: [{ code: '110022', type: 'buy', date: '2026-09-01', amount: 1000 }]
+    });
+    const mA = fm.fundMetrics('110022');
+    ok('navDate = 净值序列最后一天（2026-09-11）', mA.navDate === '2026-09-11');
+    ok('navTs 同步给出（便于后续排序/比较）', mA.navTs === dsTs('2026-09-11'));
+
+    fm.setState({
+      funds: { '110022': { code: '110022', name: 'A', points: [
+        { ts: dsTs('2026-09-01'), nav: 1 }, { ts: dsTs('2026-09-11'), nav: 1.1 }] },
+                '161725': { code: '161725', name: 'B', points: [{ ts: dsTs('2026-09-14'), nav: 2 }] } },
+      records: []
+    });
+    ok('多只基金各自给出自己的净值日期（互不串号）',
+       fm.fundMetrics('110022').navDate === '2026-09-11' && fm.fundMetrics('161725').navDate === '2026-09-14');
+
+    fm.setState({ funds: { '110022': { code: '110022', name: 'A', points: [] } }, records: [] });
+    const mEmpty = fm.fundMetrics('110022');
+    ok('净值点为空 → navDate 空串、navTs null（渲染为 —）',
+       mEmpty.navDate === '' && mEmpty.navTs === null);
+
+    fm.setState({ funds: {}, records: [{ code: '110022', type: 'sell', date: '2026-09-01', amount: 500 }] });
+    const mNoFund = fm.fundMetrics('110022');
+    ok('未加载净值的基金 → navDate 空串、navTs null 且不崩溃',
+       mNoFund.navDate === '' && mNoFund.navTs === null && mNoFund.count === 1);
+  }
+}
+
+/* ============================================================
+   27. 迭代 v2.10：净值日期落后于「应公布交易日」时标橙
+   ============================================================ */
+console.log('\n【迭代 v2.10】净值日期落后标橙');
+
+{
+  // --- 静态结构 ---
+  ok('存在基准日纯函数 dueNavTs', /function\s+dueNavTs\s*\(now\)\s*\{/.test(html));
+  ok('dueNavTs 复用 expectedNavTs 的口径（交易日 20:00 前算上一交易日）',
+     /function\s+dueNavTs[\s\S]{0,400}?var t = expectedNavTs\(now\);/.test(html));
+  ok('dueNavTs 周末回退到最近的周五（展示需要确定基准日）',
+     /var back = wd === 0 \? 2 : 1;/.test(html) && /周日 \/ 周六 → 回退到最近的周五/.test(html));
+  ok('expectedNavTs 注释与实现一致（周末返回 null，基准由 dueNavTs 兜底）',
+     /周末：返回 null（结论不明确，不误拉上游）/.test(html) &&
+     !/非交易日（周末）：目标回退到最近一个周五/.test(html));
+  ok('落后判定用严格「早于」而非「不等于」（避免把提前公布误标）',
+     /out\.navStale = out\.navTs != null && out\.navTs < due;/.test(html) && !/navTs !== due/.test(html));
+  ok('标橙色使用 --warn 变量（与置顶同为警示色）',
+     /data-stale="1" style="color:var\(--warn\);font-weight:600;font-variant-numeric:tabular-nums"/.test(html));
+  ok('单元格带 data-stale 标记（0/1，便于运行时断言与样式扩展）',
+     /data-stale="1"/.test(html) && /data-stale="0"/.test(html));
+  ok('悬停说明落后口径与处理方式（点「更新」，并注明节假日可能误标）',
+     /落后于最近应公布的交易日 ' \+ m\.navDue/.test(html) && /法定节假日可能误标/.test(html));
+  ok('列头 title 说明标橙含义', /标橙色 = 落后于最近应公布的交易日/.test(html));
+  ok('fundMetrics 同时给出 navDue / navStale',
+     /navDue: '', navStale: false/.test(html) && /out\.navDue = toDateStr\(due\)/.test(html));
+  ok('未加载净值（—）不参与标橙（仍在 faint 分支）',
+     /if \(!m\.navDate\) \{\s*navDateHtml = '<span style="color:var\(--text-faint\)">—<\/span>';/.test(html));
+}
+
+{
+  // --- 真实重放 1：dueNavTs 的基准日推算 ---
+  const blockSrc = html.slice(
+    html.indexOf('var NAV_PUBLISH_HOUR'),
+    html.indexOf('function autoRefreshNav')
+  );
+  let api = null;
+  try {
+    api = new Function(
+      'var MS_DAY = 24 * 3600 * 1000;\n' +
+      'function toDateStr(ts){if(ts==null||ts==="")return "";var d=new Date(ts);var m=d.getMonth()+1,day=d.getDate();' +
+      'return d.getFullYear()+"-"+(m<10?"0"+m:m)+"-"+(day<10?"0"+day:day);}\n' +
+      'function dateStrToTs(s){var p=String(s).split("-");var d=new Date(+p[0],+p[1]-1,+p[2]);return d.getTime();}\n' +
+      'function latestPoint(p){return p&&p.length?p[p.length-1]:null;}\n' +
+      'var autoRefreshTried = {};\n' +
+      blockSrc +
+      '\nreturn { dueNavTs: dueNavTs, expectedNavTs: expectedNavTs };'
+    )();
+    ok('dueNavTs 可独立执行', typeof api.dueNavTs === 'function');
+  } catch (e) {
+    ok('dueNavTs 可独立执行', false, e.message);
+  }
+
+  if (api) {
+    const dsTs = (s) => { const p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); };
+    const at = (dateStr, hour) => dsTs(dateStr) + hour * 3600 * 1000;
+
+    // 2026-09-14 周一 / 09-15 周二 / 09-11 周五 / 09-12 周六 / 09-13 周日
+    ok('周一 10:00 → 基准为上周五（今天净值还没出）',
+       api.dueNavTs(at('2026-09-14', 10)) === dsTs('2026-09-11'));
+    ok('周一 21:00 → 基准为当天',
+       api.dueNavTs(at('2026-09-14', 21)) === dsTs('2026-09-14'));
+    ok('周二 10:00 → 基准为周一',
+       api.dueNavTs(at('2026-09-15', 10)) === dsTs('2026-09-14'));
+    ok('周二 21:00 → 基准为当天',
+       api.dueNavTs(at('2026-09-15', 21)) === dsTs('2026-09-15'));
+    ok('周六 → 基准为周五（expectedNavTs 此时为 null）',
+       api.dueNavTs(at('2026-09-12', 21)) === dsTs('2026-09-11') &&
+       api.expectedNavTs(at('2026-09-12', 21)) === null);
+    ok('周日 → 基准为周五',
+       api.dueNavTs(at('2026-09-13', 10)) === dsTs('2026-09-11'));
+    ok('周五 21:00 → 基准为周五（周末不把最新数据误判为落后）',
+       api.dueNavTs(at('2026-09-11', 21)) === dsTs('2026-09-11'));
+  }
+}
+
+{
+  // --- 真实重放 2：fundMetrics 的落后判定 ---
+  const STUB =
+    'var MS_DAY = 24 * 3600 * 1000;\n' +
+    'var NAV_PUBLISH_HOUR = 20;\n' +
+    'var GMMA_SIGNAL_WINDOW = 10;\n' +
+    'var state = { funds: {}, records: [] };\n' +
+    'function toDateStr(ts){if(ts==null||ts==="")return "";var d=new Date(ts);var m=d.getMonth()+1,day=d.getDate();' +
+    'return d.getFullYear()+"-"+(m<10?"0"+m:m)+"-"+(day<10?"0"+day:day);}\n' +
+    'function dateStrToTs(s){var p=String(s).split("-");var d=new Date(+p[0],+p[1]-1,+p[2]);return d.getTime();}\n' +
+    'function latestPoint(p){return p&&p.length?p[p.length-1]:null;}\n' +
+    'function enrichRecords(){return [];}\n' +
+    'function latestVsLastAction(){return { vsBuy: null, vsSell: null, buyDate: null, sellDate: null };}\n' +
+    'function computeDrawdownMap(){return {};}\n' +
+    'function gmmaRecentCross(){return null;}\n' +
+    (extract('isTradingDayTs') || '') + '\n' +
+    (extract('expectedNavTs') || '') + '\n' +
+    (extract('dueNavTs') || '') + '\n';
+
+  let fm = null;
+  try {
+    fm = new Function(STUB + (extract('fundMetrics') || 'function fundMetrics(){return "MISS";}') +
+      '\nreturn { fundMetrics: fundMetrics, setState: function(s){ state = s; } };')();
+    ok('排序/渲染共用的 fundMetrics 可独立执行', typeof fm.fundMetrics === 'function');
+  } catch (e) {
+    ok('排序/渲染共用的 fundMetrics 可独立执行', false, e.message);
+  }
+
+  if (fm) {
+    const dsTs = (s) => { const p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); };
+    const at = (dateStr, hour) => dsTs(dateStr) + hour * 3600 * 1000;
+    const setFund = (dateStr) => fm.setState({
+      funds: { '110022': { code: '110022', name: 'A', points: [{ ts: dsTs(dateStr), nav: 1 }] } },
+      records: []
+    });
+
+    // 周二 21:00（基准 = 周二 09-15）
+    setFund('2026-09-11');
+    const mA = fm.fundMetrics('110022', at('2026-09-15', 21));
+    ok('净值日期落后基准 → navStale = true 且给出 navDue',
+       mA.navStale === true && mA.navDue === '2026-09-15' && mA.navDate === '2026-09-11');
+
+    setFund('2026-09-15');
+    const mB = fm.fundMetrics('110022', at('2026-09-15', 21));
+    ok('净值日期 = 基准 → 不标橙',
+       mB.navStale === false && mB.navDate === '2026-09-15');
+
+    setFund('2026-09-14');
+    const mC = fm.fundMetrics('110022', at('2026-09-15', 10));
+    ok('交易日 20:00 前，基准回落上一交易日 → 持有上一交易日净值不标橙',
+       mC.navStale === false && mC.navDue === '2026-09-14');
+
+    setFund('2026-09-15');
+    const mD = fm.fundMetrics('110022', at('2026-09-15', 10));
+    ok('上游提前公布（净值日期晚于基准）→ 视为更新，不标橙',
+       mD.navStale === false);
+
+    fm.setState({
+      funds: { '110022': { code: '110022', name: 'A', points: [{ ts: dsTs('2026-09-04'), nav: 1 }] } },
+      records: []
+    });
+    const mE = fm.fundMetrics('110022', at('2026-09-12', 21));   // 周六，基准 = 周五 09-11
+    ok('周末也判定：周五基准下 09-04 的净值仍标橙',
+       mE.navStale === true && mE.navDue === '2026-09-11');
+
+    fm.setState({ funds: { '110022': { code: '110022', name: 'A', points: [] } }, records: [] });
+    const mF = fm.fundMetrics('110022', at('2026-09-15', 21));
+    ok('无净值数据 → 不标橙（渲染为 —）', mF.navStale === false && mF.navDate === '');
+
+    fm.setState({ funds: {}, records: [] });
+    const mG = fm.fundMetrics('110022', at('2026-09-15', 21));
+    ok('未加载净值 → 不标橙、不崩溃（navDue 留空，单元格渲染为 —）',
+       mG.navStale === false && mG.navDue === '' && mG.navDate === '');
   }
 }
 

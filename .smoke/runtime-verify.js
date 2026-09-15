@@ -206,6 +206,10 @@ function wait(ms) {
   check('表头含「顾比信号」列',
         !!fundHead && fundHead.textContent.indexOf('顾比信号') >= 0,
         fundHead ? fundHead.textContent.slice(0, 120) : 'null');
+  check('表头含「净值日期」列（位于笔数与相较于前次买入之间）',
+        !!fundHead && fundHead.textContent.indexOf('净值日期') > fundHead.textContent.indexOf('笔数') &&
+        fundHead.textContent.indexOf('净值日期') < fundHead.textContent.indexOf('相较于前次买入'),
+        fundHead ? fundHead.textContent.slice(0, 120) : 'null');
   check('表头不再出现「浮动盈亏」', !!fundHead && fundHead.textContent.indexOf('浮动盈亏') < 0);
   {
     // 示例数据：4 买 1 卖均在 110022 → 两列都应有数值（非 —）
@@ -218,7 +222,45 @@ function wait(ms) {
           !!sellCell && /[-+]?\d+(\.\d+)?%/.test(sellCell.textContent), sellCell ? sellCell.textContent : 'null');
     const gmmaCell = fundRows.length ? fundRows[0].querySelector('[data-label="顾比信号"]') : null;
     check('行含「顾比信号」单元格', !!gmmaCell, gmmaCell ? 'ok' : 'missing');
-    check('列数已扩展为 8 列（新增顾比信号列）', cells.length === 8, 'cells=' + cells.length);
+    // 净值日期列：应为 YYYY-MM-DD，且等于净值缓存最后一点的日期
+    const navDateCell = fundRows.length ? fundRows[0].querySelector('[data-label="净值日期"]') : null;
+    const navPts = (navRef.funds['110022'] && navRef.funds['110022'].points) || [];
+    const lastPt = navPts.length ? navPts[navPts.length - 1] : null;
+    const expectDate = (function () {
+      if (!lastPt) return '';
+      const d = new Date(lastPt.ts);
+      const p = (n) => (n < 10 ? '0' + n : String(n));
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    })();
+    check('行含「净值日期」单元格且为 YYYY-MM-DD',
+          !!navDateCell && /^\d{4}-\d{2}-\d{2}$/.test(navDateCell.textContent.trim()),
+          navDateCell ? navDateCell.textContent : 'missing');
+    check('「净值日期」= 该基金最新净值日（与净值缓存最后一点一致）',
+          !!navDateCell && navDateCell.textContent.trim() === expectDate,
+          'cell=' + (navDateCell ? navDateCell.textContent.trim() : 'null') + ' expect=' + expectDate);
+    check('「净值日期」带「净值数据截至」悬停说明',
+          !!navDateCell && /净值数据截至/.test((navDateCell.querySelector('[title]') || {}).title || ''),
+          navDateCell ? 'ok' : 'missing');
+    // 落后标橙：单元格带 data-stale（0/1），值 = 1 时必须为橙色且说明落后于「应公布的交易日」
+    const navDateSpan = navDateCell ? navDateCell.querySelector('[data-stale]') : null;
+    const staleFlag = navDateSpan ? navDateSpan.getAttribute('data-stale') : null;
+    check('「净值日期」带落后标记 data-stale（0/1）',
+          staleFlag === '0' || staleFlag === '1', 'data-stale=' + staleFlag);
+    check('data-stale=1 ↔ 标橙色（--warn），二者一致',
+          staleFlag === '1'
+            ? /var\(--warn\)/.test(navDateSpan.getAttribute('style') || '')
+            : !/var\(--warn\)/.test(navDateSpan ? navDateSpan.getAttribute('style') || '' : 'var(--warn)'),
+          'style=' + (navDateSpan ? navDateSpan.getAttribute('style') : 'null'));
+    if (staleFlag === '1') {
+      check('标橙时悬停说明落后于最近应公布的交易日',
+            /落后于最近应公布的交易日 \d{4}-\d{2}-\d{2}/.test(navDateSpan.getAttribute('title') || ''),
+            navDateSpan.getAttribute('title'));
+    } else {
+      check('未标橙时悬停说明不出现「落后」字样',
+            !/落后于最近应公布的交易日/.test(navDateSpan ? navDateSpan.getAttribute('title') || '' : 'ok'),
+            navDateSpan ? navDateSpan.getAttribute('title') : 'ok');
+    }
+    check('列数已扩展为 9 列（新增净值日期列）', cells.length === 9, 'cells=' + cells.length);
   }
   check('启动自动升级标记已写入净值缓存',
         !!(navRef.funds['110022'] && navRef.funds['110022'].full === true),
